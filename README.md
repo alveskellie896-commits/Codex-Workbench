@@ -24,7 +24,6 @@ CODEX WORKBENCH 是一个运行在你自己电脑上的 Codex 远程工作台。
 ### 目录
 
 - [功能特性](#功能特性)
-- [运行截图](#运行截图)
 - [项目架构](#项目架构)
 - [快速开始](#快速开始)
 - [手机访问](#手机访问)
@@ -50,12 +49,6 @@ CODEX WORKBENCH 是一个运行在你自己电脑上的 Codex 远程工作台。
 - 支持 iPhone Safari/PWA 的移动端布局优化，包括键盘弹起、输入框、上下滚动和横向拖动限制。
 - 正在开发 SwiftUI 原生 iOS 客户端，用于未来 App Store 发布。
 
-### 运行截图
-
-| 项目与对话列表 | 聊天输入与运行状态 | 手机输入体验 |
-| --- | --- | --- |
-| ![项目与对话列表](docs/screenshots/mobile-projects.png) | ![聊天输入与运行状态](docs/screenshots/mobile-chat-keyboard.png) | ![手机输入体验](docs/screenshots/mobile-composer.png) |
-
 ### 项目架构
 
 ```text
@@ -63,8 +56,7 @@ CODEX WORKBENCH
 ├── src/server          # 本机 Host Service
 ├── src/client          # 手机端 PWA
 ├── public              # PWA manifest 与图标资源
-├── ios/CodexWorkbench  # 开发中的 SwiftUI 原生 iOS 客户端
-└── docs/screenshots    # README 截图资源
+└── ios/CodexWorkbench  # 开发中的 SwiftUI 原生 iOS 客户端
 ```
 
 核心设计：
@@ -216,12 +208,6 @@ The project is not a remote desktop mirror. It is a mobile-first control surface
 - Set the first-run password and change it later from settings.
 - Mobile Safari/PWA layout optimizations for keyboard, scrolling, and touch behavior.
 - Native SwiftUI iOS client under development.
-
-### Screenshots
-
-| Projects and Threads | Chat and Run Status | Mobile Composer |
-| --- | --- | --- |
-| ![Projects and Threads](docs/screenshots/mobile-projects.png) | ![Chat and Run Status](docs/screenshots/mobile-chat-keyboard.png) | ![Mobile Composer](docs/screenshots/mobile-composer.png) |
 
 ### Quick Start
 
