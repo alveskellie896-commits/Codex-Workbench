@@ -4,6 +4,7 @@ struct AuthenticationView: View {
     @Environment(AppState.self) private var appState
     @State private var password = ""
     @State private var newPassword = ""
+    @State private var confirmPassword = ""
     @State private var setupMode = SetupMode.connect
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -16,7 +17,7 @@ struct AuthenticationView: View {
                 Form {
                     Section {
                         FirstRunHero()
-                        Picker("Mode", selection: $setupMode) {
+                        Picker("模式", selection: $setupMode) {
                             ForEach(SetupMode.allCases) { mode in
                                 Text(mode.title).tag(mode)
                             }
@@ -27,19 +28,17 @@ struct AuthenticationView: View {
 
                     Section {
                         if setupMode == .connect {
-                            SecureField("Host password", text: $password)
+                            SecureField("Host 密码", text: $password)
                                 .textContentType(.password)
-                            Button("Continue", action: login)
+                            Button("继续", action: login)
                                 .disabled(password.isEmpty || isLoading)
                         } else {
-                            SecureField("New host password", text: $newPassword)
+                            SecureField("新 Host 密码", text: $newPassword)
                                 .textContentType(.newPassword)
-                            Button("Create Host Password") {
-                                // First-run setup endpoint belongs to the host/auth integration milestone.
-                                password = newPassword
-                                login()
-                            }
-                            .disabled(newPassword.count < 8 || isLoading)
+                            SecureField("确认新密码", text: $confirmPassword)
+                                .textContentType(.newPassword)
+                            Button("创建密码并进入", action: setupPassword)
+                                .disabled(newPassword.count < 4 || newPassword != confirmPassword || isLoading)
                         }
                     } header: {
                         Text(setupMode.title)
@@ -47,13 +46,13 @@ struct AuthenticationView: View {
                         Text(setupMode.footer)
                     }
 
-                    Section("Host") {
+                    Section("Host 服务") {
                         HostURLField(hostStore: appState.hostStore)
                     }
 
-                    Section("Project Bootstrap") {
-                        Label("Projects and conversations load after host authentication.", systemImage: "folder.badge.gearshape")
-                        Text("The first native release mirrors desktop Workbench structure: project groups, conversation lists, and a focused chat detail.")
+                    Section("连接说明") {
+                        Label("登录后会同步项目与对话。", systemImage: "folder.badge.gearshape")
+                        Text("原生版会复用 Mac 上的 CODEX WORKBENCH Host Service。请确保 Mac 和 iPhone 在同一局域网或 VPN 中。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -67,7 +66,7 @@ struct AuthenticationView: View {
                 }
                 .scrollContentBackground(.hidden)
             }
-            .navigationTitle("First Run")
+            .navigationTitle("CODEX WORKBENCH")
         }
     }
 
@@ -76,18 +75,20 @@ struct AuthenticationView: View {
         errorMessage = nil
 
         Task {
-            do {
-                let session = try await appState.apiClient.login(password: password)
-                await MainActor.run {
-                    appState.updateSession(session)
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isLoading = false
-                }
-            }
+            await appState.login(password: password)
+            errorMessage = appState.errorMessage
+            isLoading = false
+        }
+    }
+
+    private func setupPassword() {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            await appState.setupPassword(newPassword)
+            errorMessage = appState.errorMessage
+            isLoading = false
         }
     }
 }
@@ -101,18 +102,18 @@ private enum SetupMode: CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .connect:
-            "Connect"
+            "登录"
         case .firstRun:
-            "First Run"
+            "首次设置"
         }
     }
 
     var footer: String {
         switch self {
         case .connect:
-            "Use the password configured by your Mac Host Service."
+            "使用 Mac Host Service 已配置的访问密码。"
         case .firstRun:
-            "Setup mode is a UI placeholder until the host setup endpoint is connected."
+            "如果这是第一次打开 Host Service，可以在这里创建访问密码。"
         }
     }
 }
@@ -124,7 +125,7 @@ private struct FirstRunHero: View {
             Text("CODEX WORKBENCH")
                 .font(.system(.largeTitle, design: .rounded, weight: .black))
                 .foregroundStyle(WorkbenchTheme.ink)
-            Text("Connect this iPhone app to your local Mac host, then continue into native project and chat screens.")
+            Text("连接到你的 Mac Host Service，在 iPhone 上查看项目、继续对话并控制 Codex 运行。")
                 .font(.callout)
                 .foregroundStyle(WorkbenchTheme.mutedInk)
         }

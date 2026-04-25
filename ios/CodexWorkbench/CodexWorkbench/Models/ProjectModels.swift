@@ -157,9 +157,15 @@ struct ModelOption: Identifiable, Codable, Hashable, Sendable {
 struct ModelInfo: Codable, Hashable, Sendable {
     var threadId: String?
     var model: String
+    var availableModels: [String]?
 
     var option: ModelOption {
         ModelOption(id: model, displayName: model)
+    }
+
+    var options: [ModelOption] {
+        let models = availableModels?.isEmpty == false ? availableModels ?? [] : [model]
+        return models.map { ModelOption(id: $0, displayName: $0) }
     }
 }
 

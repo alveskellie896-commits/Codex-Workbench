@@ -4,10 +4,11 @@ struct ThreadListView: View {
     @Environment(AppState.self) private var appState
     let project: ProjectSummary
     @Binding var selection: ThreadSummary?
-    @State private var threads: [ThreadSummary] = []
     @State private var showsSubagents = false
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+
+    private var threads: [ThreadSummary] {
+        appState.threads(for: project)
+    }
 
     private var visibleThreads: [ThreadSummary] {
         showsSubagents ? threads : threads.filter { isLikelySubagent($0) == false }
@@ -32,12 +33,15 @@ struct ThreadListView: View {
                     ForEach(visibleThreads) { thread in
                         ThreadRow(thread: thread)
                             .tag(thread)
+                            .onTapGesture {
+                                appState.selectThread(thread)
+                            }
                     }
                 } header: {
-                    Text("Conversations")
+                    Text("对话")
                 } footer: {
                     if hiddenSubagentCount > 0 {
-                        Text("\(hiddenSubagentCount) multi-agent subthreads hidden. Use the toggle above to inspect them.")
+                        Text("已隐藏 \(hiddenSubagentCount) 个多 agent 子线程。打开上方开关可以查看。")
                     }
                 }
             }
@@ -45,22 +49,22 @@ struct ThreadListView: View {
         }
         .overlay {
             ThreadListOverlay(
-                isLoading: isLoading,
+                isLoading: appState.loadingProjectIDs.contains(project.id),
                 isEmpty: threads.isEmpty,
-                errorMessage: errorMessage,
+                errorMessage: appState.errorMessage,
                 retry: reload
             )
         }
         .navigationTitle(project.name)
         .task(id: project.id) {
-            await reloadAsync()
+            await appState.loadThreads(for: project)
         }
         .refreshable {
-            await reloadAsync()
+            await appState.loadThreads(for: project)
         }
         .toolbar {
-            Button("Refresh", systemImage: "arrow.clockwise", action: reload)
-                .disabled(isLoading)
+            Button("刷新", systemImage: "arrow.clockwise", action: reload)
+                .disabled(appState.loadingProjectIDs.contains(project.id))
         }
     }
 
@@ -70,21 +74,8 @@ struct ThreadListView: View {
 
     private func reload() {
         Task {
-            await reloadAsync()
+            await appState.loadThreads(for: project)
         }
-    }
-
-    private func reloadAsync() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            threads = try await appState.apiClient.fetchThreads(projectID: project.id)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
-        isLoading = false
     }
 }
 
@@ -104,7 +95,7 @@ private struct ProjectConversationHeader: View {
                         .lineLimit(1)
                 }
                 Toggle(isOn: $showsSubagents.animation()) {
-                    Label("Show multi-agent subthreads", systemImage: "person.2.wave.2")
+                    Label("显示多 agent 子线程", systemImage: "person.2.wave.2")
                 }
                 .font(.subheadline)
             }
@@ -176,17 +167,17 @@ private struct ThreadListOverlay: View {
 
     var body: some View {
         if isLoading {
-            ProgressView("Loading conversations")
+            ProgressView("正在加载对话")
         } else if let errorMessage {
             ContentUnavailableView {
-                Label("Could Not Load Conversations", systemImage: "exclamationmark.bubble")
+                Label("无法加载对话", systemImage: "exclamationmark.bubble")
             } description: {
                 Text(errorMessage)
             } actions: {
-                Button("Retry", action: retry)
+                Button("重试", action: retry)
             }
         } else if isEmpty {
-            ContentUnavailableView("No Conversations", systemImage: "message")
+            ContentUnavailableView("暂无对话", systemImage: "message")
         }
     }
 }

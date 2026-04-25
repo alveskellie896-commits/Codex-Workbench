@@ -3,16 +3,15 @@ import SwiftUI
 struct ChatView: View {
     @Environment(AppState.self) private var appState
     let thread: ThreadSummary
-    @State private var messages: [MessageEvent] = []
     @State private var draft = ""
     @State private var selectedModel: String?
-    @State private var availableModels: [ModelOption] = []
-    @State private var runState: ThreadRunState
-    @State private var errorMessage: String?
 
-    init(thread: ThreadSummary) {
-        self.thread = thread
-        _runState = State(initialValue: thread.runState)
+    private var messages: [MessageEvent] {
+        appState.messages(for: thread)
+    }
+
+    private var runState: ThreadRunState {
+        appState.runState(for: thread)
     }
 
     var body: some View {
@@ -24,7 +23,7 @@ struct ChatView: View {
             ComposerView(
                 draft: $draft,
                 selectedModel: $selectedModel,
-                models: availableModels,
+                models: appState.availableModels,
                 isRunning: runState == .running || runState == .queued,
                 send: send,
                 stop: stop
@@ -33,45 +32,26 @@ struct ChatView: View {
         .background(WorkbenchTheme.pageBackground)
         .navigationTitle(thread.title)
         .toolbar {
-            Button("Retry", systemImage: "arrow.counterclockwise", action: retry)
+            Button("重试", systemImage: "arrow.counterclockwise", action: retry)
         }
         .task(id: thread.id) {
-            await loadThread()
-            await loadModels()
+            await appState.loadThread(thread)
+            await appState.loadModels()
         }
-        .alert("Conversation Error", isPresented: hasErrorMessage) {
+        .alert("对话错误", isPresented: hasErrorMessage) {
             Button("OK", role: .cancel) {
-                errorMessage = nil
+                appState.errorMessage = nil
             }
         } message: {
-            Text(errorMessage ?? "")
+            Text(appState.errorMessage ?? "")
         }
     }
 
     private var hasErrorMessage: Binding<Bool> {
         Binding(
-            get: { errorMessage != nil },
-            set: { if $0 == false { errorMessage = nil } }
+            get: { appState.errorMessage != nil },
+            set: { if $0 == false { appState.errorMessage = nil } }
         )
-    }
-
-    private func loadThread() async {
-        do {
-            let detail = try await appState.apiClient.fetchThread(threadID: thread.id)
-            messages = detail.messages
-            runState = detail.state ?? detail.thread.runState
-            selectedModel = detail.thread.model
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func loadModels() async {
-        do {
-            availableModels = try await appState.apiClient.fetchModels()
-        } catch {
-            availableModels = []
-        }
     }
 
     private func send() {
@@ -81,63 +61,21 @@ struct ChatView: View {
         }
 
         draft = ""
-        runState = .queued
 
         Task {
-            do {
-                let detail = try await appState.apiClient.sendMessage(
-                    threadID: thread.id,
-                    content: content,
-                    model: selectedModel,
-                    attachmentIDs: []
-                )
-                await MainActor.run {
-                    messages = detail.messages
-                    runState = detail.state ?? detail.thread.runState
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    runState = .failed
-                }
-            }
+            await appState.sendMessage(thread: thread, content: content, model: selectedModel)
         }
     }
 
     private func stop() {
-        runState = .cancelling
-
         Task {
-            do {
-                try await appState.apiClient.cancelRun(threadID: thread.id)
-                await MainActor.run {
-                    runState = .idle
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    runState = .failed
-                }
-            }
+            await appState.cancel(thread: thread)
         }
     }
 
     private func retry() {
-        runState = .queued
-
         Task {
-            do {
-                let detail = try await appState.apiClient.retry(threadID: thread.id)
-                await MainActor.run {
-                    messages = detail.messages
-                    runState = detail.state ?? detail.thread.runState
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    runState = .failed
-                }
-            }
+            await appState.retry(thread: thread)
         }
     }
 }
@@ -198,19 +136,19 @@ private struct ToolRunStatusPlaceholder: View {
 
     private var statusText: String {
         if runState == .idle {
-            "Waiting for the next request."
+            "等待下一次请求。"
         } else if runState == .queued {
-            "Queued on the host."
+            "已提交到主机队列。"
         } else if runState == .running {
-            "Codex is running tools or generating a response."
+            "Codex 正在运行工具或生成回复。"
         } else if runState == .cancelling {
-            "Stop requested."
+            "已请求停止。"
         } else if runState == .failed {
-            "Last run failed. Retry is available from the toolbar."
+            "上一次运行失败，可以从工具栏重试。"
         } else if runState == .completed {
-            "Last run completed."
+            "上一次运行已完成。"
         } else if runState == .cancelled {
-            "Last run was cancelled."
+            "上一次运行已取消。"
         } else {
             runState.phase.capitalized
         }

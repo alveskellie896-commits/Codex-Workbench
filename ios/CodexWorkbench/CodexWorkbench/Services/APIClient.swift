@@ -99,7 +99,7 @@ struct APIClient {
     }
 
     func fetchModels() async throws -> [ModelOption] {
-        [try await model().option]
+        try await model().options
     }
 
     func model() async throws -> ModelInfo {
