@@ -43,7 +43,6 @@ jobs:
           echo "IOS_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
       - name: Build iPhone app without Apple Developer signing
-        continue-on-error: true
         env:
           IOS_DERIVED_DATA: ${{ runner.temp }}/CodexWorkbenchDerivedData
           IOS_BUILD_LOG: ${{ runner.temp }}/xcodebuild.log
@@ -84,7 +83,6 @@ jobs:
           if-no-files-found: ignore
 
       - name: Package unsigned IPA
-        if: always()
         env:
           IOS_DERIVED_DATA: ${{ runner.temp }}/CodexWorkbenchDerivedData
           IOS_UNSIGNED_IPA_DIR: ${{ runner.temp }}/CodexWorkbenchUnsignedIPA
@@ -99,7 +97,8 @@ jobs:
 
           mkdir -p "$IOS_UNSIGNED_IPA_DIR/Payload"
           cp -R "$APP_PATH" "$IOS_UNSIGNED_IPA_DIR/Payload/"
-          ditto -c -k --keepParent "$IOS_UNSIGNED_IPA_DIR/Payload" "$IOS_UNSIGNED_IPA_DIR/CodexWorkbench-unsigned.ipa"
+          (cd "$IOS_UNSIGNED_IPA_DIR" && zip -qry "CodexWorkbench-unsigned.ipa" Payload)
+          unzip -l "$IOS_UNSIGNED_IPA_DIR/CodexWorkbench-unsigned.ipa" | head -n 40
           ls -lh "$IOS_UNSIGNED_IPA_DIR"
 
       - name: Upload unsigned IPA artifact
