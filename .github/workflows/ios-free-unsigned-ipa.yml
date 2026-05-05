@@ -18,8 +18,6 @@ jobs:
       IOS_PROJECT: ios/CodexWorkbench/CodexWorkbench.xcodeproj
       IOS_SCHEME: CodexWorkbench
       IOS_CONFIGURATION: Release
-      IOS_DERIVED_DATA: ${{ runner.temp }}/CodexWorkbenchDerivedData
-      IOS_UNSIGNED_IPA_DIR: ${{ runner.temp }}/CodexWorkbenchUnsignedIPA
 
     steps:
       - name: Check out repository
@@ -44,6 +42,8 @@ jobs:
           echo "IOS_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
       - name: Build iPhone app without Apple Developer signing
+        env:
+          IOS_DERIVED_DATA: ${{ runner.temp }}/CodexWorkbenchDerivedData
         run: |
           set -euo pipefail
           xcodebuild build \
@@ -60,6 +60,9 @@ jobs:
             clean build
 
       - name: Package unsigned IPA
+        env:
+          IOS_DERIVED_DATA: ${{ runner.temp }}/CodexWorkbenchDerivedData
+          IOS_UNSIGNED_IPA_DIR: ${{ runner.temp }}/CodexWorkbenchUnsignedIPA
         run: |
           set -euo pipefail
           APP_PATH="$(find "$IOS_DERIVED_DATA/Build/Products/${IOS_CONFIGURATION}-iphoneos" -maxdepth 1 -name "*.app" -print -quit)"
@@ -80,4 +83,3 @@ jobs:
           name: CodexWorkbench-unsigned-IPA
           path: ${{ runner.temp }}/CodexWorkbenchUnsignedIPA/CodexWorkbench-unsigned.ipa
           if-no-files-found: error
-
