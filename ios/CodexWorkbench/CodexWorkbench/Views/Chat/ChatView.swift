@@ -757,15 +757,15 @@ private struct SendQueueStrip: View {
     private func queueSubtitle(for item: SendQueueItem) -> String {
         switch item.stage {
         case .queued:
-            "Queued locally on this iPhone."
+            return "Queued locally on this iPhone."
         case .uploading:
-            "Uploading \(item.attachments.count) attachment(s)."
+            return "Uploading \(item.attachments.count) attachment(s)."
         case .sending:
-            "Sending to the Windows computer."
+            return "Sending to the Windows computer."
         case .submitted:
-            "Delivered to Codex."
+            return "Delivered to Codex."
         case .followUpQueued:
-            "Queued as a follow-up on the computer."
+            return "Queued as a follow-up on the computer."
         case .failed:
             return item.errorMessage ?? "Send failed."
         }
