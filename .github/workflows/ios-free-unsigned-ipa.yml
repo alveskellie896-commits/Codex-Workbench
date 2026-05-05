@@ -68,6 +68,8 @@ jobs:
             echo "## Xcode build tail"
             echo ""
             echo '```text'
+            grep -nEi "error:|fatal error:|Build input file cannot be found|No such module|Command SwiftCompile failed|Provisioning profile|CodeSign" "$IOS_BUILD_LOG" | tail -n 120 || true
+            echo ""
             tail -n 220 "$IOS_BUILD_LOG"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
