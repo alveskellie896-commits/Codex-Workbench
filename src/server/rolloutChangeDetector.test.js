@@ -31,4 +31,31 @@ describe("detectRolloutChanges", () => {
 
     expect(detectRolloutChanges(new Map(), threads, mtimes).changed).toEqual([]);
   });
+
+  test("walks nested subagent threads", () => {
+    const previous = new Map([
+      ["/tmp/root.jsonl", 10],
+      ["/tmp/sub.jsonl", 20]
+    ]);
+    const threads = [
+      {
+        id: "thread-root",
+        cwd: "/project/a",
+        rolloutPath: "/tmp/root.jsonl",
+        subagents: [{ id: "thread-sub", cwd: "/project/a", rolloutPath: "/tmp/sub.jsonl", subagents: [] }]
+      }
+    ];
+    const mtimes = new Map([
+      ["/tmp/root.jsonl", 10],
+      ["/tmp/sub.jsonl", 21]
+    ]);
+
+    expect(detectRolloutChanges(previous, threads, mtimes)).toEqual({
+      next: new Map([
+        ["/tmp/root.jsonl", 10],
+        ["/tmp/sub.jsonl", 21]
+      ]),
+      changed: [{ threadId: "thread-sub", cwd: "/project/a", rolloutPath: "/tmp/sub.jsonl" }]
+    });
+  });
 });

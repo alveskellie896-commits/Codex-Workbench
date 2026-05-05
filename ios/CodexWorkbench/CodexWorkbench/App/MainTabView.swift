@@ -5,7 +5,7 @@ struct MainTabView: View {
         TabView {
             ProjectsSplitView()
                 .tabItem {
-                    Label("Workbench", systemImage: "bubble.left.and.bubble.right")
+                    Label("Chats", systemImage: "bubble.left.and.bubble.right")
                 }
 
             SettingsView()

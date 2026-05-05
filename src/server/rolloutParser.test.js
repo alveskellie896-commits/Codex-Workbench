@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { normalizeRolloutEvent, parseRolloutFile } from "./rolloutParser.js";
+import { appendRolloutText, createRolloutParseState, finalizeRolloutParseState, normalizeRolloutEvent, parseRolloutFile } from "./rolloutParser.js";
 
 const tempDirs = [];
 
@@ -316,6 +316,35 @@ describe("normalizeRolloutEvent", () => {
 });
 
 describe("parseRolloutFile", () => {
+  test("continues incremental parsing from cached messages", () => {
+    const state = createRolloutParseState("fixture-thread", {
+      messages: [
+        {
+          id: "fixture-thread:1:user",
+          threadId: "fixture-thread",
+          role: "user",
+          kind: "message",
+          text: "cached",
+          createdAt: "2026-04-25T06:07:08.000Z"
+        }
+      ],
+      lineNumber: 1,
+      lastMessageByText: [["user:cached", new Date("2026-04-25T06:07:08.000Z").getTime()]]
+    });
+
+    appendRolloutText(
+      state,
+      JSON.stringify({
+        timestamp: "2026-04-25T06:08:08.000Z",
+        type: "event_msg",
+        payload: { type: "user_message", message: "next" }
+      }) + "\n"
+    );
+    finalizeRolloutParseState(state);
+
+    expect(state.events.map((event) => event.text)).toEqual(["cached", "next"]);
+  });
+
   test("keeps repeated visible messages when they are separate turns", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rollout-parser-"));
     tempDirs.push(dir);

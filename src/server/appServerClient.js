@@ -2,9 +2,11 @@ import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import WebSocket from "ws";
 import { cleanChatText } from "./chatText.js";
-import { CODEX_REMOTE_MODEL } from "./config.js";
+import { CODEX_REMOTE_MODEL, codexProcessEnv, resolveCodexCliCommand } from "./config.js";
+import { buildAppServerTurnOptions, prefixPromptForPlanMode } from "./runtimeControls.js";
 
 const DEFAULT_URL = process.env.CODEX_APP_SERVER_URL || "ws://127.0.0.1:8790";
+const INITIALIZE_REQUEST_ID = "__codex_initialize__";
 
 export class CodexAppServerClient extends EventEmitter {
   constructor({ url = DEFAULT_URL } = {}) {
@@ -37,8 +39,8 @@ export class CodexAppServerClient extends EventEmitter {
     }
     await this.request("initialize", {
       clientInfo: { name: "codex-mobile-workbench", title: "CODEX WORKBENCH", version: "0.1.0" },
-      capabilities: { experimentalApi: true }
-    });
+      capabilities: { experimentalApi: true, optOutNotificationMethods: [] }
+    }, { id: INITIALIZE_REQUEST_ID });
     this.initialized = true;
     return this;
   }
@@ -80,8 +82,8 @@ export class CodexAppServerClient extends EventEmitter {
     if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
       throw new Error(`Refusing to spawn Codex app-server for non-loopback URL ${this.url}`);
     }
-    this.child = spawn("codex", ["app-server", "--listen", this.url], {
-      env: process.env,
+    this.child = spawn(resolveCodexCliCommand(), ["app-server", "--listen", this.url, "--analytics-default-enabled"], {
+      env: codexProcessEnv(),
       stdio: ["ignore", "ignore", "pipe"]
     });
     this.child.stderr?.setEncoding("utf8");
@@ -112,15 +114,19 @@ export class CodexAppServerClient extends EventEmitter {
     if (message.method) this.emit("notification", message);
   }
 
-  async request(method, params) {
+  async request(method, params, options = {}) {
     await this.ensureSocketOpen();
-    const id = String(this.nextId++);
+    const id = options.id || String(this.nextId++);
     const payload = { id, method, params };
     const promise = new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       setTimeout(() => {
         if (!this.pending.has(id)) return;
         this.pending.delete(id);
+        this.initialized = false;
+        try {
+          this.ws?.close();
+        } catch {}
         reject(new Error(`${method} timed out`));
       }, 30000).unref();
     });
@@ -142,12 +148,34 @@ export class CodexAppServerClient extends EventEmitter {
     });
   }
 
-  async startTurn(threadId, text, model = CODEX_REMOTE_MODEL) {
+  async startThread({ cwd = null, model = CODEX_REMOTE_MODEL } = {}) {
     await this.ensureConnected();
+    const params = {};
+    if (cwd) params.cwd = cwd;
+    if (model) params.model = model;
+    return this.request("thread/start", params);
+  }
+
+  async startTurn(threadOrId, text, controls = {}) {
+    await this.ensureConnected();
+    const threadId = typeof threadOrId === "string" ? threadOrId : threadOrId.id;
+    const cwd = typeof threadOrId === "string" ? null : threadOrId.cwd || null;
+    const options = buildAppServerTurnOptions({ ...controls, model: controls.model || CODEX_REMOTE_MODEL });
     return this.request("turn/start", {
       threadId,
-      input: [{ type: "text", text, text_elements: [] }],
-      model
+      input: [{ type: "text", text: prefixPromptForPlanMode(text, controls), text_elements: [] }],
+      cwd,
+      approvalPolicy: options.approvalPolicy,
+      approvalsReviewer: "user",
+      sandboxPolicy: options.sandboxPolicy,
+      model: options.model || CODEX_REMOTE_MODEL,
+      serviceTier: null,
+      effort: options.effort,
+      summary: "none",
+      personality: null,
+      outputSchema: null,
+      collaborationMode: null,
+      attachments: []
     });
   }
 

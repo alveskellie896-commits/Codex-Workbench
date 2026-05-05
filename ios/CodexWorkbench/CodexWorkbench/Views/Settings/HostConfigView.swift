@@ -11,27 +11,30 @@ struct HostConfigView: View {
                 Section {
                     HostURLField(hostStore: appState.hostStore)
                 } header: {
-                    Text("Mac Host")
+                    Text("Computer URL")
                 } footer: {
-                    Text("Persistence is handled by HostURLStore. Health checks and auth setup can be wired once the host API contract is stable.")
+                    Text("Use the Windows service URL. On the same Wi-Fi this is usually a LAN address; outside the network use the public phone link.")
                 }
 
                 Section("Connection Checklist") {
                     Label("Local network permission", systemImage: "network")
-                    Label("Host password or setup token", systemImage: "key")
+                    Label("Computer password or trusted device pairing", systemImage: "key")
                     Label("Project index and session database access", systemImage: "folder")
                 }
 
                 Section("Actions") {
                     Button {
-                        // Future: call host health endpoint and present result.
+                        Task {
+                            await appState.refreshBootstrap()
+                        }
                     } label: {
                         Label("Test Connection", systemImage: "antenna.radiowaves.left.and.right")
                     }
+                    .disabled(appState.isRefreshingBootstrap)
                 }
             }
             .scrollContentBackground(.hidden)
         }
-        .navigationTitle("Host Config")
+        .navigationTitle("Connection")
     }
 }

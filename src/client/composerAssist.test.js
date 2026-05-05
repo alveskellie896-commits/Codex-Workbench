@@ -1,9 +1,9 @@
-import { describe, expect, test } from "vitest";
+﻿import { describe, expect, test } from "vitest";
 import { applyComposerSuggestion, filterComposerSuggestions, getComposerTrigger } from "./composerAssist.js";
 
 describe("getComposerTrigger", () => {
   test("detects a slash command at the current word", () => {
-    expect(getComposerTrigger("请 /can", 7)).toEqual({ kind: "slash", query: "can", start: 2, end: 7 });
+    expect(getComposerTrigger("请 /can", 6)).toEqual({ kind: "slash", query: "can", start: 2, end: 6 });
   });
 
   test("detects a mention at the current word", () => {

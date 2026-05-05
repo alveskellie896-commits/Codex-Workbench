@@ -2,31 +2,132 @@ import SwiftUI
 
 struct MessageListView: View {
     let messages: [MessageEvent]
+    @State private var isPinnedToBottom = true
+    @State private var showJumpToLatest = false
 
     var body: some View {
         ScrollViewReader { proxy in
-            List(messages) { message in
-                MessageBubble(message: message)
-                    .id(message.id)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .overlay {
-                if messages.isEmpty {
-                    ContentUnavailableView("No Messages Yet", systemImage: "text.bubble")
+            GeometryReader { viewport in
+                let viewportHeight = viewport.size.height
+
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(messages) { message in
+                            MessageBubble(message: message)
+                                .id(message.id)
+                        }
+
+                        BottomSentinel()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                 }
-            }
-            .onChange(of: messages.count) {
-                guard let lastID = messages.last?.id else {
-                    return
+                .coordinateSpace(name: "message-scroll")
+                .background(WorkbenchTheme.pageBackground)
+                .overlay {
+                    if messages.isEmpty {
+                        ContentUnavailableView("No Messages Yet", systemImage: "text.bubble")
+                    } else if showJumpToLatest {
+                        jumpToLatestButton(proxy: proxy)
+                    }
                 }
-                withAnimation {
-                    proxy.scrollTo(lastID, anchor: .bottom)
+                .onPreferenceChange(BottomEdgePreferenceKey.self) { bottomEdge in
+                    let distanceFromBottom = bottomEdge - viewportHeight
+                    let pinned = distanceFromBottom < 160
+                    isPinnedToBottom = pinned
+                    if pinned {
+                        showJumpToLatest = false
+                    }
+                }
+                .onChange(of: latestMessageFingerprint) {
+                    followLatestIfNeeded(proxy: proxy)
+                }
+                .onAppear {
+                    scrollToBottom(proxy: proxy, animated: false)
                 }
             }
         }
+    }
+
+    private var latestMessageFingerprint: String {
+        guard let message = messages.last else {
+            return "empty"
+        }
+        return [
+            message.id,
+            String(message.content.count),
+            String(message.attachmentIDs.count)
+        ].joined(separator: ":")
+    }
+
+    private func jumpToLatestButton(proxy: ScrollViewProxy) -> some View {
+        VStack {
+            Spacer()
+            Button {
+                scrollToBottom(proxy: proxy, animated: true)
+            } label: {
+                Label("Latest", systemImage: "arrow.down")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .foregroundStyle(.white)
+                    .background(WorkbenchTheme.accent, in: Capsule())
+                    .shadow(color: .black.opacity(0.16), radius: 12, y: 6)
+            }
+            .padding(.bottom, 12)
+        }
+    }
+
+    private func followLatestIfNeeded(proxy: ScrollViewProxy) {
+        guard messages.last?.id != nil else {
+            return
+        }
+        if isPinnedToBottom {
+            scrollToBottom(proxy: proxy, animated: false)
+        } else {
+            showJumpToLatest = true
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        guard let lastID = messages.last?.id else {
+            return
+        }
+        let scroll = {
+            proxy.scrollTo(lastID, anchor: .bottom)
+            showJumpToLatest = false
+            isPinnedToBottom = true
+        }
+        if animated {
+            withAnimation(.snappy(duration: 0.24)) {
+                scroll()
+            }
+        } else {
+            scroll()
+        }
+    }
+}
+
+private struct BottomSentinel: View {
+    var body: some View {
+        Color.clear
+            .frame(height: 1)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(
+                        key: BottomEdgePreferenceKey.self,
+                        value: geometry.frame(in: .named("message-scroll")).maxY
+                    )
+                }
+            }
+    }
+}
+
+private struct BottomEdgePreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

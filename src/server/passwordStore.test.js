@@ -35,12 +35,25 @@ describe("passwordStore", () => {
   test("uses environment password as a fallback until a local password is saved", async () => {
     const { passwordStatus, setPassword, verifyPassword } = await loadPasswordStore({ envPassword: "1234" });
 
-    await expect(passwordStatus()).resolves.toMatchObject({ configured: true, setupRequired: false, source: "environment" });
+    await expect(passwordStatus()).resolves.toMatchObject({
+      configured: true,
+      setupRequired: false,
+      source: "environment",
+      environmentPasswordConfigured: true,
+      environmentPasswordIgnored: false
+    });
     await expect(verifyPassword("1234")).resolves.toBe(true);
 
     await setPassword("5678");
 
-    await expect(passwordStatus()).resolves.toMatchObject({ configured: true, setupRequired: false, source: "local" });
+    await expect(passwordStatus()).resolves.toMatchObject({
+      configured: true,
+      setupRequired: false,
+      source: "local",
+      localPasswordConfigured: true,
+      environmentPasswordConfigured: true,
+      environmentPasswordIgnored: true
+    });
     await expect(verifyPassword("1234")).resolves.toBe(false);
     await expect(verifyPassword("5678")).resolves.toBe(true);
   });

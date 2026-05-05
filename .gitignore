@@ -13,7 +13,10 @@ coverage/
 
 # Codex local runtime/state
 .codex/
+.codex-run/
 mobile-uploads/
+current-phone-link.txt
+redesign-iphone.png
 
 # Logs
 *.log

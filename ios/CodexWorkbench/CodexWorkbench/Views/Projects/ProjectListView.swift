@@ -13,7 +13,12 @@ struct ProjectListView: View {
 
             List(selection: $selection) {
                 Section {
-                    HostSummaryCard(hostURL: appState.hostStore.hostURL)
+                    HostSummaryCard(
+                        hostURL: appState.hostStore.hostURL,
+                        title: appState.connectionTitle,
+                        detail: appState.connectionDetail,
+                        isOnline: appState.bootstrapErrorMessage == nil && appState.bootstrapInfo != nil
+                    )
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
@@ -70,23 +75,34 @@ struct ProjectListView: View {
 
 private struct HostSummaryCard: View {
     let hostURL: URL
+    let title: String
+    let detail: String
+    let isOnline: Bool
 
     var body: some View {
         WorkbenchCard {
             HStack(spacing: 12) {
                 Image(systemName: "server.rack")
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(WorkbenchTheme.accent)
+                    .foregroundStyle(isOnline ? WorkbenchTheme.accent : WorkbenchTheme.warning)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Mac Host Service")
+                    Text(title)
                         .font(.headline)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     Text(hostURL.absoluteString)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer()
-                StatusPill(text: "Local", systemImage: "checkmark.circle")
+                StatusPill(
+                    text: isOnline ? "Online" : "Check",
+                    systemImage: isOnline ? "checkmark.circle" : "wifi.exclamationmark",
+                    tint: isOnline ? WorkbenchTheme.accent : WorkbenchTheme.warning
+                )
             }
         }
     }

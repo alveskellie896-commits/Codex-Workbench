@@ -31,6 +31,9 @@
 		000000000000000000000116 /* HostURLStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000216 /* HostURLStoreTests.swift */; };
 		000000000000000000000117 /* WorkbenchTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000218 /* WorkbenchTheme.swift */; };
 		000000000000000000000118 /* HostConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000219 /* HostConfigView.swift */; };
+		000000000000000000000119 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000021A /* DeviceIdentity.swift */; };
+		00000000000000000000011A /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000021B /* NotificationService.swift */; };
+		00000000000000000000011B /* RuntimeControlsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000021C /* RuntimeControlsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,6 +72,9 @@
 		000000000000000000000217 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		000000000000000000000218 /* WorkbenchTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkbenchTheme.swift; sourceTree = "<group>"; };
 		000000000000000000000219 /* HostConfigView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostConfigView.swift; sourceTree = "<group>"; };
+		00000000000000000000021A /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
+		00000000000000000000021B /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		00000000000000000000021C /* RuntimeControlsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeControlsTests.swift; sourceTree = "<group>"; };
 		000000000000000000000501 /* CodexWorkbench.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodexWorkbench.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000502 /* CodexWorkbenchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexWorkbenchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -101,11 +107,11 @@
 			path = CodexWorkbench;
 			sourceTree = "<group>";
 		};
-		000000000000000000000702 /* CodexWorkbenchTests */ = {isa = PBXGroup; children = (000000000000000000000216 /* HostURLStoreTests.swift */,); path = CodexWorkbenchTests; sourceTree = "<group>"; };
+		000000000000000000000702 /* CodexWorkbenchTests */ = {isa = PBXGroup; children = (000000000000000000000216 /* HostURLStoreTests.swift */, 00000000000000000000021C /* RuntimeControlsTests.swift */,); path = CodexWorkbenchTests; sourceTree = "<group>"; };
 		000000000000000000000703 /* Products */ = {isa = PBXGroup; children = (000000000000000000000501 /* CodexWorkbench.app */, 000000000000000000000502 /* CodexWorkbenchTests.xctest */,); name = Products; sourceTree = "<group>"; };
 		000000000000000000000704 /* App */ = {isa = PBXGroup; children = (000000000000000000000201, 000000000000000000000202, 000000000000000000000203, 000000000000000000000204,); path = App; sourceTree = "<group>"; };
 		000000000000000000000705 /* Models */ = {isa = PBXGroup; children = (000000000000000000000205, 000000000000000000000206, 000000000000000000000207,); path = Models; sourceTree = "<group>"; };
-		000000000000000000000706 /* Services */ = {isa = PBXGroup; children = (000000000000000000000208, 000000000000000000000209, 00000000000000000000020A, 00000000000000000000020B, 00000000000000000000020C,); path = Services; sourceTree = "<group>"; };
+		000000000000000000000706 /* Services */ = {isa = PBXGroup; children = (000000000000000000000208, 000000000000000000000209, 00000000000000000000020A, 00000000000000000000020B, 00000000000000000000020C, 00000000000000000000021A, 00000000000000000000021B,); path = Services; sourceTree = "<group>"; };
 		000000000000000000000707 /* Views */ = {isa = PBXGroup; children = (000000000000000000000709 /* Auth */, 00000000000000000000070A /* Projects */, 00000000000000000000070B /* Chat */, 00000000000000000000070C /* Settings */,); path = Views; sourceTree = "<group>"; };
 		000000000000000000000708 /* Resources */ = {isa = PBXGroup; children = (000000000000000000000217, 000000000000000000000215,); path = Resources; sourceTree = "<group>"; };
 		000000000000000000000709 /* Auth */ = {isa = PBXGroup; children = (00000000000000000000020D,); path = Auth; sourceTree = "<group>"; };
@@ -171,8 +177,8 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		000000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000101, 000000000000000000000102, 000000000000000000000103, 000000000000000000000104, 000000000000000000000105, 000000000000000000000106, 000000000000000000000107, 000000000000000000000108, 000000000000000000000109, 00000000000000000000010A, 00000000000000000000010B, 00000000000000000000010C, 00000000000000000000010D, 00000000000000000000010E, 00000000000000000000010F, 000000000000000000000110, 000000000000000000000111, 000000000000000000000112, 000000000000000000000113, 000000000000000000000114, 000000000000000000000117, 000000000000000000000118,); runOnlyForDeploymentPostprocessing = 0; };
-		000000000000000000000903 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000116,); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000901 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000101, 000000000000000000000102, 000000000000000000000103, 000000000000000000000104, 000000000000000000000105, 000000000000000000000106, 000000000000000000000107, 000000000000000000000108, 000000000000000000000109, 00000000000000000000010A, 00000000000000000000010B, 00000000000000000000010C, 000000000000000000000119, 00000000000000000000011A, 00000000000000000000010D, 00000000000000000000010E, 00000000000000000000010F, 000000000000000000000110, 000000000000000000000111, 000000000000000000000112, 000000000000000000000113, 000000000000000000000114, 000000000000000000000117, 000000000000000000000118,); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000903 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000116, 00000000000000000000011B,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */

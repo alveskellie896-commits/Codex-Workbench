@@ -4,6 +4,8 @@ import Security
 protocol TokenStore {
     func loadSession() -> AuthSession?
     func saveSession(_ session: AuthSession?)
+    func loadTrustedDevice() -> TrustedDeviceCredential?
+    func saveTrustedDevice(_ credential: TrustedDeviceCredential?)
 }
 
 final class UserDefaultsTokenStore: TokenStore {
@@ -39,11 +41,31 @@ final class UserDefaultsTokenStore: TokenStore {
         }
         userDefaults.set(data, forKey: key)
     }
+
+    func loadTrustedDevice() -> TrustedDeviceCredential? {
+        guard let data = userDefaults.data(forKey: "\(key).trustedDevice") else {
+            return nil
+        }
+        return try? decoder.decode(TrustedDeviceCredential.self, from: data)
+    }
+
+    func saveTrustedDevice(_ credential: TrustedDeviceCredential?) {
+        let trustedKey = "\(key).trustedDevice"
+        guard let credential else {
+            userDefaults.removeObject(forKey: trustedKey)
+            return
+        }
+        guard let data = try? encoder.encode(credential) else {
+            return
+        }
+        userDefaults.set(data, forKey: trustedKey)
+    }
 }
 
 final class KeychainTokenStore: TokenStore {
     private let service = "com.codexworkbench.ios.auth"
-    private let account = "session"
+    private let sessionAccount = "session"
+    private let trustedDeviceAccount = "trusted-device"
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -53,6 +75,22 @@ final class KeychainTokenStore: TokenStore {
     }
 
     func loadSession() -> AuthSession? {
+        loadValue(AuthSession.self, account: sessionAccount)
+    }
+
+    func saveSession(_ session: AuthSession?) {
+        saveValue(session, account: sessionAccount)
+    }
+
+    func loadTrustedDevice() -> TrustedDeviceCredential? {
+        loadValue(TrustedDeviceCredential.self, account: trustedDeviceAccount)
+    }
+
+    func saveTrustedDevice(_ credential: TrustedDeviceCredential?) {
+        saveValue(credential, account: trustedDeviceAccount)
+    }
+
+    private func loadValue<Value: Decodable>(_ type: Value.Type, account: String) -> Value? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -66,17 +104,17 @@ final class KeychainTokenStore: TokenStore {
         guard status == errSecSuccess, let data = result as? Data else {
             return nil
         }
-        return try? decoder.decode(AuthSession.self, from: data)
+        return try? decoder.decode(type, from: data)
     }
 
-    func saveSession(_ session: AuthSession?) {
+    private func saveValue<Value: Encodable>(_ value: Value?, account: String) {
         let baseQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
 
-        guard let session, let data = try? encoder.encode(session) else {
+        guard let value, let data = try? encoder.encode(value) else {
             SecItemDelete(baseQuery as CFDictionary)
             return
         }

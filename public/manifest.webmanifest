@@ -1,15 +1,33 @@
 {
-  "name": "CODEX WORKBENCH",
-  "short_name": "CODEX WORKBENCH",
+  "name": "随身聊天",
+  "short_name": "聊天",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f4f1e9",
-  "theme_color": "#111713",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait",
+  "background_color": "#edf3f8",
+  "theme_color": "#0a84ff",
+  "description": "从手机继续电脑上的 AI 聊天，支持搜索历史、续聊、附件和断线恢复。",
+  "categories": ["productivity", "developer", "utilities"],
   "icons": [
     {
       "src": "/pwa-icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "打开聊天",
+      "short_name": "打开",
+      "url": "/"
+    },
+    {
+      "name": "配对手机",
+      "short_name": "配对",
+      "url": "/pair"
     }
   ]
 }

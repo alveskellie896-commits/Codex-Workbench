@@ -1,0 +1,168 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Optional build number. Leave empty to use GitHub run number."
+        required: false
+        type: string
+
+jobs:
+  build-and-upload:
+    name: Build and upload iOS app
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    env:
+      IOS_PROJECT: ios/CodexWorkbench/CodexWorkbench.xcodeproj
+      IOS_SCHEME: CodexWorkbench
+      IOS_CONFIGURATION: Release
+      IOS_ARCHIVE_PATH: ${{ runner.temp }}/CodexWorkbench.xcarchive
+      IOS_EXPORT_PATH: ${{ runner.temp }}/CodexWorkbenchExport
+      IOS_KEYCHAIN_PATH: ${{ runner.temp }}/codex-workbench-signing.keychain-db
+      IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+      IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+
+      - name: Run web and contract tests
+        run: |
+          npm ci
+          npm test -- src/client/App.test.jsx
+
+      - name: Prepare signing keychain
+        env:
+          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${IOS_DISTRIBUTION_CERTIFICATE_BASE64:-}" ] || [ -z "${IOS_PROVISIONING_PROFILE_BASE64:-}" ]; then
+            echo "Missing iOS signing secrets. Read docs/ios-no-mac-testflight-zh.md."
+            exit 1
+          fi
+
+          CERT_PATH="$RUNNER_TEMP/distribution_certificate.p12"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+
+          echo "$IOS_DISTRIBUTION_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+
+          security create-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$IOS_KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$IOS_KEYCHAIN_PATH"
+          security unlock-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$IOS_KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$IOS_KEYCHAIN_PATH"
+          security list-keychain -d user -s "$IOS_KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$IOS_KEYCHAIN_PASSWORD" "$IOS_KEYCHAIN_PATH"
+
+          mkdir -p "$PROFILE_DIR"
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$(security cms -D -i "$PROFILE_PATH")")"
+          cp "$PROFILE_PATH" "$PROFILE_DIR/$PROFILE_UUID.mobileprovision"
+          echo "IOS_PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+
+      - name: Resolve build settings
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER="${{ inputs.build_number }}"
+          if [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="${{ github.run_number }}"
+          fi
+          echo "IOS_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+
+          BUNDLE_ID="${IOS_BUNDLE_ID:-com.codexworkbench.ios}"
+          echo "IOS_EFFECTIVE_BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
+
+      - name: Archive iOS app
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project "$IOS_PROJECT" \
+            -scheme "$IOS_SCHEME" \
+            -configuration "$IOS_CONFIGURATION" \
+            -destination "generic/platform=iOS" \
+            -archivePath "$IOS_ARCHIVE_PATH" \
+            CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER" \
+            PRODUCT_BUNDLE_IDENTIFIER="$IOS_EFFECTIVE_BUNDLE_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_UUID" \
+            clean archive
+
+      - name: Create export options
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$IOS_EFFECTIVE_BUNDLE_ID</key>
+              <string>$IOS_PROFILE_UUID</string>
+            </dict>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$IOS_ARCHIVE_PATH" \
+            -exportPath "$IOS_EXPORT_PATH" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexWorkbench-iOS-IPA
+          path: ${{ runner.temp }}/CodexWorkbenchExport/*.ipa
+          if-no-files-found: error
+
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          printf "%s" "$APP_STORE_CONNECT_API_PRIVATE_KEY" > "$KEY_PATH"
+
+          IPA_PATH="$(find "$IOS_EXPORT_PATH" -name "*.ipa" -print -quit)"
+          if [ -z "$IPA_PATH" ]; then
+            echo "IPA not found."
+            exit 1
+          fi
+
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
+
+      - name: Clean keychain
+        if: always()
+        run: |
+          security delete-keychain "$IOS_KEYCHAIN_PATH" || true

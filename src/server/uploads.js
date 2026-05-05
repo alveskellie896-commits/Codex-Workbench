@@ -17,6 +17,14 @@ export function sanitizeUploadName(name = "upload") {
   return base || "upload";
 }
 
+export function sanitizeUploadSegment(value = "unscoped") {
+  const base = String(value || "unscoped")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return base || "unscoped";
+}
+
 export async function saveBase64Upload(upload, { uploadRoot = codexPath("mobile-uploads"), now = () => new Date() } = {}) {
   const data = Buffer.from(upload.dataBase64 || "", "base64");
   if (!data.length) {
@@ -30,13 +38,15 @@ export async function saveBase64Upload(upload, { uploadRoot = codexPath("mobile-
     throw error;
   }
 
-  const dir = path.join(uploadRoot, dateFolder(now));
+  const threadId = String(upload.threadId || upload.thread_id || "").trim();
+  const dir = path.join(uploadRoot, dateFolder(now), sanitizeUploadSegment(threadId || "unscoped"));
   await fs.mkdir(dir, { recursive: true });
   const safeName = sanitizeUploadName(upload.name);
   const filePath = path.join(dir, `${Date.now()}-${safeName}`);
   await fs.writeFile(filePath, data);
 
   return {
+    threadId,
     name: safeName,
     type: upload.type || "application/octet-stream",
     size: data.byteLength,
@@ -51,5 +61,5 @@ export function formatPromptWithAttachments(message, attachments = []) {
     const type = attachment.type ? ` (${attachment.type})` : "";
     return `- ${attachment.name || "attachment"}${type}: ${attachment.path}`;
   });
-  return [cleanMessage, "附件文件：", ...lines].filter(Boolean).join("\n\n").replace(/\n\n- /g, "\n- ");
+  return [cleanMessage, "Attached files:", ...lines].filter(Boolean).join("\n\n").replace(/\n\n- /g, "\n- ");
 }

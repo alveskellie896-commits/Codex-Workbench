@@ -29,6 +29,10 @@ struct APIClient {
         try await request(path: "/api/auth/status", requiresAuth: false)
     }
 
+    func mobileBootstrap() async throws -> MobileBootstrap {
+        try await request(path: "/api/mobile/v1/bootstrap", requiresAuth: false, includeAuthIfAvailable: true)
+    }
+
     func setupPassword(_ password: String) async throws -> AuthSession {
         let response: LoginResponse = try await request(
             path: "/api/auth/setup",
@@ -51,6 +55,56 @@ struct APIClient {
         return response.session
     }
 
+    func deviceLogin(credential: TrustedDeviceCredential, fingerprint: String) async throws -> DeviceLoginResponse {
+        let response: DeviceLoginResponse = try await request(
+            path: "/api/auth/device-login",
+            method: "POST",
+            body: DeviceLoginRequest(
+                deviceId: credential.deviceId,
+                deviceToken: credential.deviceToken,
+                fingerprint: fingerprint
+            ),
+            requiresAuth: false
+        )
+        tokenStore.saveSession(response.session)
+        return response
+    }
+
+    func completePairing(code: String, deviceName: String, fingerprint: String) async throws -> PairingCompleteResponse {
+        let response: PairingCompleteResponse = try await request(
+            path: "/api/pairing/complete",
+            method: "POST",
+            body: PairingCompleteRequest(code: code, deviceName: deviceName, fingerprint: fingerprint),
+            requiresAuth: false
+        )
+        tokenStore.saveTrustedDevice(response.trustedCredential)
+        tokenStore.saveSession(response.session)
+        return response
+    }
+
+    func fetchTrustedDevices() async throws -> [TrustedDevice] {
+        let response: DeviceListResponse = try await request(path: "/api/devices")
+        return response.devices
+    }
+
+    func renameTrustedDevice(deviceID: String, name: String) async throws -> TrustedDevice {
+        let response: DeviceResponse = try await request(
+            path: "/api/devices",
+            method: "PATCH",
+            body: DeviceMutationRequest(deviceId: deviceID, name: name)
+        )
+        return response.device
+    }
+
+    func revokeTrustedDevice(deviceID: String) async throws -> TrustedDevice {
+        let response: DeviceResponse = try await request(
+            path: "/api/devices",
+            method: "DELETE",
+            body: DeviceMutationRequest(deviceId: deviceID)
+        )
+        return response.device
+    }
+
     func refresh() async throws -> AuthSession {
         guard let refreshToken = tokenStore.loadSession()?.refreshToken else {
             throw APIClientError.unauthorized
@@ -64,7 +118,10 @@ struct APIClient {
         let session = AuthSession(
             accessToken: response.accessToken,
             refreshToken: response.refreshToken ?? refreshToken,
-            expiresAt: response.session.expiresAt
+            expiresAt: response.session.expiresAt,
+            deviceId: response.deviceId,
+            authMethod: response.authMethod,
+            trustLevel: response.trustLevel
         )
         tokenStore.saveSession(session)
         return session
@@ -88,10 +145,36 @@ struct APIClient {
         try await request(path: "/api/threads", queryItems: [URLQueryItem(name: "project", value: projectID)])
     }
 
+    func createThread(projectID: String? = nil) async throws -> ThreadSummary {
+        let response: CreateThreadResponse = try await request(
+            path: "/api/threads/new",
+            method: "POST",
+            body: CreateThreadRequest(cwd: projectID)
+        )
+        return response.thread
+    }
+
     func fetchThread(threadID: String) async throws -> ThreadDetail {
-        var detail: ThreadDetail = try await request(path: "/api/threads/\(threadID.urlPathEncoded)")
-        detail.messages = try await fetchMessages(threadID: threadID)
-        return detail
+        try await fetchThreadDetail(threadID: threadID)
+    }
+
+    func fetchThreadDetail(
+        threadID: String,
+        afterMessageID: String? = nil,
+        beforeMessageID: String? = nil,
+        limit: Int? = nil
+    ) async throws -> ThreadDetail {
+        var queryItems: [URLQueryItem] = []
+        if let afterMessageID, afterMessageID.isEmpty == false {
+            queryItems.append(URLQueryItem(name: "after", value: afterMessageID))
+        }
+        if let beforeMessageID, beforeMessageID.isEmpty == false {
+            queryItems.append(URLQueryItem(name: "before", value: beforeMessageID))
+        }
+        if let limit {
+            queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
+        return try await request(path: "/api/threads/\(threadID.urlPathEncoded)/detail", queryItems: queryItems)
     }
 
     func fetchMessages(threadID: String) async throws -> [MessageEvent] {
@@ -99,7 +182,7 @@ struct APIClient {
     }
 
     func fetchModels() async throws -> [ModelOption] {
-        [try await model().option]
+        try await model().options
     }
 
     func model() async throws -> ModelInfo {
@@ -126,6 +209,30 @@ struct APIClient {
         )
     }
 
+    func runtimeDefaults() async throws -> RuntimeInfo {
+        try await request(path: "/api/runtime/defaults")
+    }
+
+    func setRuntimeDefaults(_ controls: RuntimeControls) async throws -> RuntimeInfo {
+        try await request(
+            path: "/api/runtime/defaults",
+            method: "POST",
+            body: RuntimeControlsRequest(controls: controls)
+        )
+    }
+
+    func threadRuntime(threadID: String) async throws -> RuntimeInfo {
+        try await request(path: "/api/threads/\(threadID.urlPathEncoded)/runtime")
+    }
+
+    func setThreadRuntime(threadID: String, controls: RuntimeControls) async throws -> RuntimeInfo {
+        try await request(
+            path: "/api/threads/\(threadID.urlPathEncoded)/runtime",
+            method: "POST",
+            body: RuntimeControlsRequest(controls: controls)
+        )
+    }
+
     func systemStatus() async throws -> SystemStatus {
         try await request(path: "/api/system/status")
     }
@@ -134,20 +241,54 @@ struct APIClient {
         threadID: String,
         content: String,
         model: String?,
-        attachmentIDs: [String]
+        attachments: [UploadedFile] = [],
+        runtime: RuntimeControls? = nil
     ) async throws -> ThreadDetail {
-        if let model, model.isEmpty == false {
-            _ = try await setThreadModel(threadID: threadID, model: model)
-        }
-        _ = try await send(threadID: threadID, message: content, attachments: [])
+        let controls = runtime ?? RuntimeControls(model: model ?? "")
+        _ = try await setThreadRuntime(threadID: threadID, controls: controls)
+        _ = try await send(threadID: threadID, message: content, attachments: attachments, runtime: controls)
         return try await fetchThread(threadID: threadID)
     }
 
-    func send(threadID: String, message: String, attachments: [UploadedFile] = []) async throws -> ThreadRunState {
+    func sendMessage(
+        threadID: String,
+        content: String,
+        model: String?,
+        attachmentIDs: [String]
+    ) async throws -> ThreadDetail {
+        _ = attachmentIDs
+        return try await sendMessage(threadID: threadID, content: content, model: model, attachments: [])
+    }
+
+    func send(
+        threadID: String,
+        message: String,
+        attachments: [UploadedFile] = [],
+        runtime: RuntimeControls? = nil
+    ) async throws -> ThreadRunState {
         try await request(
             path: "/api/threads/\(threadID.urlPathEncoded)/send",
             method: "POST",
-            body: SendMessageRequest(message: message, attachments: attachments)
+            body: SendMessageRequest(message: message, attachments: attachments, runtime: runtime)
+        )
+    }
+
+    func fetchFollowUps(threadID: String) async throws -> FollowUpResponse {
+        try await request(path: "/api/threads/\(threadID.urlPathEncoded)/followups")
+    }
+
+    func enqueueFollowUp(threadID: String, message: String, runtime: RuntimeControls? = nil) async throws -> FollowUpResponse {
+        try await request(
+            path: "/api/threads/\(threadID.urlPathEncoded)/followups",
+            method: "POST",
+            body: FollowUpRequest(message: message, runtime: runtime)
+        )
+    }
+
+    func cancelFollowUp(threadID: String, followUpID: String) async throws -> FollowUpResponse {
+        try await request(
+            path: "/api/threads/\(threadID.urlPathEncoded)/followups/\(followUpID.urlPathEncoded)",
+            method: "DELETE"
         )
     }
 
@@ -166,8 +307,34 @@ struct APIClient {
         return try await fetchThread(threadID: threadID)
     }
 
+    func openDesktopThread(threadID: String) async throws -> DesktopOpenResponse {
+        try await request(
+            path: "/api/threads/\(threadID.urlPathEncoded)/open-desktop",
+            method: "POST"
+        )
+    }
+
     func upload(files: [UploadRequestFile]) async throws -> UploadResponse {
         try await request(path: "/api/uploads", method: "POST", body: UploadFilesRequest(files: files))
+    }
+
+    func uploadAttachment(
+        threadID: String,
+        fileName: String,
+        contentType: String,
+        data: Data
+    ) async throws -> UploadedFile {
+        let file = UploadRequestFile(
+            name: fileName,
+            type: contentType,
+            dataBase64: data.base64EncodedString(),
+            threadId: threadID
+        )
+        let response = try await upload(files: [file])
+        guard let upload = response.uploads.first else {
+            throw APIClientError.invalidResponse
+        }
+        return upload
     }
 
     func uploadAttachment(
@@ -175,11 +342,7 @@ struct APIClient {
         contentType: String,
         data: Data
     ) async throws -> AttachmentUploadResponse {
-        let file = UploadRequestFile(name: fileName, type: contentType, dataBase64: data.base64EncodedString())
-        let response = try await upload(files: [file])
-        guard let upload = response.uploads.first else {
-            throw APIClientError.invalidResponse
-        }
+        let upload = try await uploadAttachment(threadID: "", fileName: fileName, contentType: contentType, data: data)
         return AttachmentUploadResponse(id: upload.path, fileName: upload.name, contentType: upload.type)
     }
 
@@ -188,15 +351,24 @@ struct APIClient {
         method: String = "GET",
         queryItems: [URLQueryItem] = [],
         requiresAuth: Bool = true,
+        includeAuthIfAvailable: Bool = false,
         allowRefresh: Bool = true
     ) async throws -> Response {
-        let request = try makeRequest(path: path, method: method, queryItems: queryItems, body: nil, requiresAuth: requiresAuth)
+        let request = try makeRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            body: nil,
+            requiresAuth: requiresAuth,
+            includeAuthIfAvailable: includeAuthIfAvailable
+        )
         return try await perform(request, retrying: {
             try await self.request(
                 path: path,
                 method: method,
                 queryItems: queryItems,
                 requiresAuth: requiresAuth,
+                includeAuthIfAvailable: includeAuthIfAvailable,
                 allowRefresh: false
             ) as Response
         }, allowRefresh: allowRefresh && requiresAuth)
@@ -208,10 +380,18 @@ struct APIClient {
         body: RequestBody,
         queryItems: [URLQueryItem] = [],
         requiresAuth: Bool = true,
+        includeAuthIfAvailable: Bool = false,
         allowRefresh: Bool = true
     ) async throws -> Response {
         let bodyData = try encoder.encode(body)
-        let request = try makeRequest(path: path, method: method, queryItems: queryItems, body: bodyData, requiresAuth: requiresAuth)
+        let request = try makeRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            body: bodyData,
+            requiresAuth: requiresAuth,
+            includeAuthIfAvailable: includeAuthIfAvailable
+        )
         return try await perform(request, retrying: {
             try await self.request(
                 path: path,
@@ -219,6 +399,7 @@ struct APIClient {
                 body: body,
                 queryItems: queryItems,
                 requiresAuth: requiresAuth,
+                includeAuthIfAvailable: includeAuthIfAvailable,
                 allowRefresh: false
             ) as Response
         }, allowRefresh: allowRefresh && requiresAuth)
@@ -270,7 +451,8 @@ struct APIClient {
         method: String,
         queryItems: [URLQueryItem],
         body: Data?,
-        requiresAuth: Bool
+        requiresAuth: Bool,
+        includeAuthIfAvailable: Bool
     ) throws -> URLRequest {
         guard var components = URLComponents(url: hostStore.hostURL, resolvingAgainstBaseURL: false) else {
             throw APIClientError.invalidURL(path)
@@ -292,7 +474,7 @@ struct APIClient {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        if requiresAuth, let session = tokenStore.loadSession(), session.isExpired == false {
+        if (requiresAuth || includeAuthIfAvailable), let session = tokenStore.loadSession(), session.isExpired == false {
             request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
         }
         return request

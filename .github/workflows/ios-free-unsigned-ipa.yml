@@ -1,0 +1,83 @@
+name: iOS Free Unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Optional build number. Leave empty to use GitHub run number."
+        required: false
+        type: string
+
+jobs:
+  build-unsigned-ipa:
+    name: Build unsigned IPA for sideloading
+    runs-on: macos-15
+    timeout-minutes: 35
+
+    env:
+      IOS_PROJECT: ios/CodexWorkbench/CodexWorkbench.xcodeproj
+      IOS_SCHEME: CodexWorkbench
+      IOS_CONFIGURATION: Release
+      IOS_DERIVED_DATA: ${{ runner.temp }}/CodexWorkbenchDerivedData
+      IOS_UNSIGNED_IPA_DIR: ${{ runner.temp }}/CodexWorkbenchUnsignedIPA
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+
+      - name: Run web and native contract tests
+        run: |
+          npm ci
+          npm test -- src/client/App.test.jsx
+
+      - name: Resolve build number
+        run: |
+          BUILD_NUMBER="${{ inputs.build_number }}"
+          if [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="${{ github.run_number }}"
+          fi
+          echo "IOS_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Build iPhone app without Apple Developer signing
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project "$IOS_PROJECT" \
+            -scheme "$IOS_SCHEME" \
+            -configuration "$IOS_CONFIGURATION" \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath "$IOS_DERIVED_DATA" \
+            CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find "$IOS_DERIVED_DATA/Build/Products/${IOS_CONFIGURATION}-iphoneos" -maxdepth 1 -name "*.app" -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "Built .app not found."
+            find "$IOS_DERIVED_DATA/Build/Products" -maxdepth 3 -print
+            exit 1
+          fi
+
+          mkdir -p "$IOS_UNSIGNED_IPA_DIR/Payload"
+          cp -R "$APP_PATH" "$IOS_UNSIGNED_IPA_DIR/Payload/"
+          ditto -c -k --keepParent "$IOS_UNSIGNED_IPA_DIR/Payload" "$IOS_UNSIGNED_IPA_DIR/CodexWorkbench-unsigned.ipa"
+          ls -lh "$IOS_UNSIGNED_IPA_DIR"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexWorkbench-unsigned-IPA
+          path: ${{ runner.temp }}/CodexWorkbenchUnsignedIPA/CodexWorkbench-unsigned.ipa
+          if-no-files-found: error
+

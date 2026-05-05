@@ -11,12 +11,14 @@ final class WebSocketClient {
     private let tokenStore: TokenStore
     private let decoder: JSONDecoder
     private var task: URLSessionWebSocketTask?
+    private let session: URLSession
 
     private(set) var connectionState: WebSocketConnectionState = .offline
 
-    init(hostStore: HostURLStore, tokenStore: TokenStore) {
+    init(hostStore: HostURLStore, tokenStore: TokenStore, session: URLSession = .shared) {
         self.hostStore = hostStore
         self.tokenStore = tokenStore
+        self.session = session
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom(WorkbenchDateCoding.decodeDate)
@@ -24,14 +26,18 @@ final class WebSocketClient {
     }
 
     func connect() throws -> AsyncThrowingStream<WorkbenchSocketEvent, Error> {
+        disconnect()
         let request = try makeRequest()
-        let task = URLSession.shared.webSocketTask(with: request)
+        let task = session.webSocketTask(with: request)
         self.task = task
         connectionState = .connecting
         task.resume()
         connectionState = .online
 
         return AsyncThrowingStream { continuation in
+            continuation.onTermination = { _ in
+                task.cancel(with: .goingAway, reason: nil)
+            }
             Task {
                 do {
                     while Task.isCancelled == false {
@@ -49,8 +55,43 @@ final class WebSocketClient {
         }
     }
 
-    func connect(threadID: String) async throws -> AsyncThrowingStream<WorkbenchSocketEvent, Error> {
+    func connect(threadID: String) throws -> AsyncThrowingStream<WorkbenchSocketEvent, Error> {
         try connect()
+    }
+
+    func eventsWithReconnect(
+        maxAttempts: Int = 6,
+        baseDelayNanoseconds: UInt64 = 800_000_000
+    ) -> AsyncThrowingStream<WorkbenchSocketEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                var attempts = 0
+                while Task.isCancelled == false {
+                    do {
+                        let stream = try connect()
+                        attempts = 0
+                        for try await event in stream {
+                            continuation.yield(event)
+                        }
+                    } catch {
+                        connectionState = .offline
+                        attempts += 1
+                        if attempts > maxAttempts {
+                            continuation.finish(throwing: error)
+                            return
+                        }
+                        let multiplier = UInt64(1 << min(attempts - 1, 4))
+                        try? await Task.sleep(nanoseconds: baseDelayNanoseconds * multiplier)
+                    }
+                }
+                continuation.finish()
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+                self.disconnect()
+            }
+        }
     }
 
     func disconnect() {

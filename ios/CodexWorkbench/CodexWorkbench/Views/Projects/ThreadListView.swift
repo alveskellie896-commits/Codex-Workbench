@@ -5,16 +5,24 @@ struct ThreadListView: View {
     let project: ProjectSummary
     @Binding var selection: ThreadSummary?
     @State private var threads: [ThreadSummary] = []
+    @State private var searchText = ""
     @State private var showsSubagents = false
     @State private var isLoading = false
+    @State private var isCreatingThread = false
     @State private var errorMessage: String?
 
     private var visibleThreads: [ThreadSummary] {
-        showsSubagents ? threads : threads.filter { isLikelySubagent($0) == false }
+        let source = showsSubagents ? threads : threads.filter { isLikelySubagent($0) == false }
+        return source.matching(searchText)
     }
 
     private var hiddenSubagentCount: Int {
-        max(threads.count - visibleThreads.count, 0)
+        let visibleWithoutSearch = showsSubagents ? threads : threads.filter { isLikelySubagent($0) == false }
+        return max(threads.count - visibleWithoutSearch.count, 0)
+    }
+
+    private var isSearching: Bool {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
     var body: some View {
@@ -29,9 +37,16 @@ struct ThreadListView: View {
                 }
 
                 Section {
-                    ForEach(visibleThreads) { thread in
-                        ThreadRow(thread: thread)
-                            .tag(thread)
+                    if isCreatingThread {
+                        CreatingThreadRow()
+                    }
+                    if visibleThreads.isEmpty && isSearching {
+                        ThreadSearchEmptyRow(query: searchText)
+                    } else {
+                        ForEach(visibleThreads) { thread in
+                            ThreadRow(thread: thread)
+                                .tag(thread)
+                        }
                     }
                 } header: {
                     Text("Conversations")
@@ -43,9 +58,11 @@ struct ThreadListView: View {
             }
             .scrollContentBackground(.hidden)
         }
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search conversations")
         .overlay {
             ThreadListOverlay(
                 isLoading: isLoading,
+                hasThreads: threads.isEmpty == false,
                 isEmpty: threads.isEmpty,
                 errorMessage: errorMessage,
                 retry: reload
@@ -59,8 +76,13 @@ struct ThreadListView: View {
             await reloadAsync()
         }
         .toolbar {
-            Button("Refresh", systemImage: "arrow.clockwise", action: reload)
-                .disabled(isLoading)
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button("New Chat", systemImage: "square.and.pencil", action: createThread)
+                    .disabled(isCreatingThread)
+
+                Button("Refresh", systemImage: "arrow.clockwise", action: reload)
+                    .disabled(isLoading)
+            }
         }
     }
 
@@ -71,6 +93,30 @@ struct ThreadListView: View {
     private func reload() {
         Task {
             await reloadAsync()
+        }
+    }
+
+    private func createThread() {
+        guard isCreatingThread == false else {
+            return
+        }
+        isCreatingThread = true
+        errorMessage = nil
+
+        Task {
+            do {
+                let thread = try await appState.apiClient.createThread(projectID: project.id)
+                await MainActor.run {
+                    threads.insertOrMoveToFront(thread)
+                    selection = thread
+                    isCreatingThread = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isCreatingThread = false
+                }
+            }
         }
     }
 
@@ -85,6 +131,38 @@ struct ThreadListView: View {
         }
 
         isLoading = false
+    }
+}
+
+private extension Array where Element == ThreadSummary {
+    mutating func insertOrMoveToFront(_ thread: ThreadSummary) {
+        removeAll { $0.id == thread.id }
+        insert(thread, at: 0)
+    }
+
+    func matching(_ query: String) -> [ThreadSummary] {
+        let tokens = query
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard tokens.isEmpty == false else {
+            return self
+        }
+
+        return filter { thread in
+            let haystack = [
+                thread.title,
+                thread.cwd,
+                thread.gitBranch,
+                thread.model ?? "",
+                thread.effectiveModel ?? "",
+                thread.agentNickname,
+                thread.agentRole
+            ]
+                .joined(separator: " ")
+                .lowercased()
+            return tokens.allSatisfy { haystack.contains($0) }
+        }
     }
 }
 
@@ -140,6 +218,33 @@ private struct ThreadRow: View {
     }
 }
 
+private struct CreatingThreadRow: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Creating chat")
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+        }
+        .foregroundStyle(WorkbenchTheme.accent)
+        .padding(.vertical, 6)
+    }
+}
+
+private struct ThreadSearchEmptyRow: View {
+    let query: String
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("No Matching Chats", systemImage: "magnifyingglass")
+        } description: {
+            Text("No conversation matches \"\(query.trimmingCharacters(in: .whitespacesAndNewlines))\".")
+        }
+        .padding(.vertical, 20)
+    }
+}
+
 struct RunStatePill: View {
     let runState: ThreadRunState
 
@@ -170,12 +275,13 @@ struct RunStatePill: View {
 
 private struct ThreadListOverlay: View {
     let isLoading: Bool
+    let hasThreads: Bool
     let isEmpty: Bool
     let errorMessage: String?
     let retry: () -> Void
 
     var body: some View {
-        if isLoading {
+        if isLoading && hasThreads == false {
             ProgressView("Loading conversations")
         } else if let errorMessage {
             ContentUnavailableView {

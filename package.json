@@ -9,17 +9,24 @@
     "server": "node src/server/index.js",
     "build": "vite build",
     "start": "node src/server/index.js",
+    "start:public": "npm run build && node src/server/publicTunnel.js",
     "test": "vitest run"
   },
   "dependencies": {
+    "@openai/codex": "^0.125.0",
     "@vitejs/plugin-react": "^5.1.0",
+    "cloudflared": "^0.7.1",
     "lucide-react": "^0.556.0",
+    "qrcode": "^1.5.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "sql.js": "^1.14.1",
     "vite": "^7.2.6",
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@electron/asar": "^4.2.0",
+    "jsdom": "^29.1.0",
     "vitest": "^4.0.15"
   }
 }

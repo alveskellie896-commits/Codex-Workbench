@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import readline from "node:readline";
 import { cleanChatText, stringifyVisibleValue } from "./chatText.js";
 
 const MAX_OUTPUT_PREVIEW = 6000;
@@ -235,42 +234,90 @@ export function normalizeRolloutEvent(entry, lineNumber, fallbackThreadId) {
   return null;
 }
 
-export async function parseRolloutFile(rolloutPath, threadId) {
-  const events = [];
-  const lastMessageByText = new Map();
-  if (!rolloutPath || !fs.existsSync(rolloutPath)) return events;
-
-  const stream = fs.createReadStream(rolloutPath, { encoding: "utf8" });
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-  let lineNumber = 0;
-
-  for await (const line of rl) {
-    lineNumber += 1;
-    if (!line.trim()) continue;
-    try {
-      const entry = JSON.parse(line);
-      const normalized = normalizeRolloutEvent(entry, lineNumber, threadId);
-      if (!normalized) continue;
-      if (normalized.kind === "message") {
-        const key = `${normalized.role}:${normalized.text}`;
-        const createdAtMs = new Date(normalized.createdAt).getTime();
-        const lastSeenAtMs = lastMessageByText.get(key);
-        if (Number.isFinite(createdAtMs) && Number.isFinite(lastSeenAtMs) && createdAtMs - lastSeenAtMs <= 1000) continue;
-        lastMessageByText.set(key, createdAtMs);
-      }
-      events.push(normalized);
-    } catch {
-      events.push({
-        id: stableId(threadId, lineNumber, "parse-error"),
-        threadId,
-        role: "system",
-        kind: "tool_output",
-        toolStatus: "failed",
-        outputPreview: line.slice(0, MAX_OUTPUT_PREVIEW),
-        createdAt: new Date(0).toISOString()
-      });
+function appendNormalizedRolloutEvent(state, normalized) {
+  if (!normalized) return;
+  if (normalized.kind === "message") {
+    const key = `${normalized.role}:${normalized.text}`;
+    const createdAtMs = new Date(normalized.createdAt).getTime();
+    const lastSeenAtMs = state.lastMessageByText.get(key);
+    if (Number.isFinite(createdAtMs) && Number.isFinite(lastSeenAtMs) && createdAtMs - lastSeenAtMs <= 1000) {
+      return;
     }
+    state.lastMessageByText.set(key, createdAtMs);
   }
+  state.events.push(normalized);
+}
 
-  return events;
+function appendRolloutParseError(state, line) {
+  state.events.push({
+    id: stableId(state.threadId, state.lineNumber, "parse-error"),
+    threadId: state.threadId,
+    role: "system",
+    kind: "tool_output",
+    toolStatus: "failed",
+    outputPreview: line.slice(0, MAX_OUTPUT_PREVIEW),
+    createdAt: new Date(0).toISOString()
+  });
+}
+
+function processRolloutLine(state, line) {
+  state.lineNumber += 1;
+  if (!line.trim()) return;
+  try {
+    const entry = JSON.parse(line);
+    appendNormalizedRolloutEvent(state, normalizeRolloutEvent(entry, state.lineNumber, state.threadId));
+  } catch {
+    appendRolloutParseError(state, line);
+  }
+}
+
+export function createRolloutParseState(threadId, seed = {}) {
+  const seededEvents = Array.isArray(seed.events)
+    ? seed.events
+    : Array.isArray(seed.messages)
+      ? seed.messages
+      : [];
+  return {
+    threadId,
+    events: [...seededEvents],
+    lastMessageByText:
+      seed.lastMessageByText instanceof Map ? new Map(seed.lastMessageByText) : new Map(Array.isArray(seed.lastMessageByText) ? seed.lastMessageByText : []),
+    lineNumber: Number(seed.lineNumber) || 0,
+    remainder: typeof seed.remainder === "string" ? seed.remainder : ""
+  };
+}
+
+export function appendRolloutText(state, text) {
+  if (!text) return state;
+  const combined = `${state.remainder}${text}`;
+  const lines = combined.split(/\r?\n/);
+  state.remainder = /\r?\n$/.test(combined) ? "" : lines.pop() || "";
+  for (const line of lines) {
+    processRolloutLine(state, line);
+  }
+  return state;
+}
+
+export function finalizeRolloutParseState(state) {
+  if (state.remainder) {
+    const trailingLine = state.remainder;
+    state.remainder = "";
+    processRolloutLine(state, trailingLine);
+  }
+  return state;
+}
+
+export async function parseRolloutFileState(rolloutPath, threadId) {
+  const state = createRolloutParseState(threadId);
+  if (!rolloutPath || !fs.existsSync(rolloutPath)) return state;
+  const stream = fs.createReadStream(rolloutPath, { encoding: "utf8" });
+  for await (const chunk of stream) {
+    appendRolloutText(state, chunk);
+  }
+  return finalizeRolloutParseState(state);
+}
+
+export async function parseRolloutFile(rolloutPath, threadId) {
+  const state = await parseRolloutFileState(rolloutPath, threadId);
+  return state.events;
 }

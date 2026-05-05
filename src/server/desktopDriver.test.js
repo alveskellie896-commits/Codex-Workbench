@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildCodexThreadDeepLink } from "./desktopDriver.js";
+import { buildCodexNewThreadDeepLink, buildCodexThreadDeepLink } from "./desktopDriver.js";
 
 describe("buildCodexThreadDeepLink", () => {
   test("builds Codex Desktop's thread deeplink URL", () => {
@@ -10,5 +10,9 @@ describe("buildCodexThreadDeepLink", () => {
 
   test("encodes the thread id path segment", () => {
     expect(buildCodexThreadDeepLink("thread/with spaces")).toBe("codex://threads/thread%2Fwith%20spaces");
+  });
+
+  test("builds Codex Desktop's new-thread deeplink URL", () => {
+    expect(buildCodexNewThreadDeepLink()).toBe("codex://threads/new");
   });
 });

@@ -37,7 +37,10 @@ export async function passwordStatus() {
   return {
     configured,
     setupRequired: !configured,
-    source: stored ? "local" : PASSWORD ? "environment" : "none"
+    source: stored ? "local" : PASSWORD ? "environment" : "none",
+    localPasswordConfigured: Boolean(stored),
+    environmentPasswordConfigured: Boolean(PASSWORD),
+    environmentPasswordIgnored: Boolean(stored && PASSWORD)
   };
 }
 
