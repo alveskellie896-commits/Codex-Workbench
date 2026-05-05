@@ -1,6 +1,12 @@
 name: iOS Free Unsigned IPA
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-free-unsigned-ipa.yml"
   workflow_dispatch:
     inputs:
       build_number:
@@ -17,7 +23,7 @@ jobs:
     env:
       IOS_PROJECT: ios/CodexWorkbench/CodexWorkbench.xcodeproj
       IOS_SCHEME: CodexWorkbench
-      IOS_CONFIGURATION: Release
+      IOS_CONFIGURATION: Debug
 
     steps:
       - name: Check out repository

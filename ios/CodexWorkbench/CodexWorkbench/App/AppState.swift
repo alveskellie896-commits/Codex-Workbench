@@ -4,6 +4,18 @@ import Observation
 @MainActor
 @Observable
 final class AppState {
+    var connectionState = WebSocketConnectionState.offline
+    var projects: [ProjectSummary] = []
+    var threadsByProject: [String: [ThreadSummary]] = [:]
+    var messagesByThread: [String: [MessageEvent]] = [:]
+    var runStatesByThread: [String: ThreadRunState] = [:]
+    var isLoadingProjects = false
+    var loadingProjectIDs = Set<String>()
+    var loadingThreadIDs = Set<String>()
+    var availableModels: [ModelOption] = []
+    var systemStatus: SystemStatus?
+    var errorMessage: String?
+
     var selectedProject: ProjectSummary?
     var selectedThread: ThreadSummary?
     var session: AuthSession?
@@ -162,6 +174,27 @@ final class AppState {
             runStatesByThread = [:]
             selectedProject = nil
             selectedThread = nil
+        }
+    }
+
+    func login(password: String) async {
+        do {
+            updateSession(try await apiClient.login(password: password))
+            await refreshBootstrap()
+            errorMessage = nil
+        } catch {
+            updateSession(nil)
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func setupPassword(_ password: String) async {
+        do {
+            updateSession(try await apiClient.setupPassword(password))
+            await refreshBootstrap()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -353,6 +386,10 @@ final class AppState {
             await loadSystemStatus()
         case .modelChanged:
             await loadModels()
+        case .followUpQueued, .followUpUpdated, .followUpCancelled, .followUpReordered, .runtimeChanged, .securityDeviceRevoked:
+            if let selectedThread {
+                await loadThread(selectedThread)
+            }
         case .unknown:
             break
         }

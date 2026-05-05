@@ -49,10 +49,10 @@ struct ThreadListView: View {
                         }
                     }
                 } header: {
-                    Text("对话")
+                    Text("Chats")
                 } footer: {
                     if hiddenSubagentCount > 0 {
-                        Text("已隐�?\(hiddenSubagentCount) 个多 agent 子线程。打开上方开关可以查看�?)
+                        Text("Hidden \(hiddenSubagentCount) subagent thread(s). Turn on Show subagents to view them.")
                     }
                 }
             }
@@ -182,7 +182,7 @@ private struct ProjectConversationHeader: View {
                         .lineLimit(1)
                 }
                 Toggle(isOn: $showsSubagents.animation()) {
-                    Label("显示�?agent 子线�?, systemImage: "person.2.wave.2")
+                    Label("Show subagent threads", systemImage: "person.2.wave.2")
                 }
                 .font(.subheadline)
             }

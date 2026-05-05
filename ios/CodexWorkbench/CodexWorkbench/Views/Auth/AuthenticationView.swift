@@ -118,17 +118,6 @@ struct AuthenticationView: View {
         }
     }
 
-    private func setupPassword() {
-        isLoading = true
-        errorMessage = nil
-
-        Task {
-            await appState.setupPassword(newPassword)
-            errorMessage = appState.errorMessage
-            isLoading = false
-        }
-    }
-
     private func trustedLogin() {
         guard let credential = appState.trustedDevice else {
             errorMessage = "No trusted device is saved. Pair this iPhone first."

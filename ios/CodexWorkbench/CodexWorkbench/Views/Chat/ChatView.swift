@@ -13,6 +13,7 @@ struct ChatView: View {
     @State private var runtimeControls = RuntimeControls()
     @State private var isRuntimeSheetPresented = false
     @State private var runState: ThreadRunState
+    @State private var localMessages: [MessageEvent] = []
     @State private var sendQueue: [SendQueueItem] = []
     @State private var isProcessingSendQueue = false
     @State private var isOpeningDesktop = false
@@ -21,12 +22,9 @@ struct ChatView: View {
     @State private var detailRefreshTask: Task<Void, Never>?
     @State private var shouldNotifyRunCompletion = false
 
-    private var messages: [MessageEvent] {
-        appState.messages(for: thread)
-    }
-
-    private var runState: ThreadRunState {
-        appState.runState(for: thread)
+    init(thread: ThreadSummary) {
+        self.thread = thread
+        _runState = State(initialValue: thread.runState)
     }
 
     var body: some View {
@@ -39,7 +37,7 @@ struct ChatView: View {
                 realtimeState: realtimeState
             )
             Divider()
-            MessageListView(messages: messages)
+            MessageListView(messages: visibleMessages)
             if sendQueue.isEmpty == false {
                 SendQueueStrip(
                     items: sendQueue,
@@ -104,19 +102,23 @@ struct ChatView: View {
             detailRefreshTask?.cancel()
             detailRefreshTask = nil
         }
-        .alert("对话错误", isPresented: hasErrorMessage) {
+        .alert("Chat Error", isPresented: hasErrorMessage) {
             Button("OK", role: .cancel) {
-                appState.errorMessage = nil
+                errorMessage = nil
             }
         } message: {
-            Text(appState.errorMessage ?? "")
+            Text(errorMessage ?? "")
         }
+    }
+
+    private var visibleMessages: [MessageEvent] {
+        localMessages.isEmpty ? appState.messages(for: thread) : localMessages
     }
 
     private var hasErrorMessage: Binding<Bool> {
         Binding(
-            get: { appState.errorMessage != nil },
-            set: { if $0 == false { appState.errorMessage = nil } }
+            get: { errorMessage != nil },
+            set: { if $0 == false { errorMessage = nil } }
         )
     }
 
@@ -479,8 +481,11 @@ struct ChatView: View {
     @MainActor
     private func apply(_ detail: ThreadDetail) {
         let previousState = runState
-        messages = mergedMessages(current: messages, incoming: detail.messages)
+        localMessages = mergedMessages(current: visibleMessages, incoming: detail.messages)
+        appState.messagesByThread[thread.id] = localMessages
         runState = detail.state ?? detail.thread.runState
+        appState.runStatesByThread[thread.id] = runState
+        appState.selectedThread = detail.thread
         if runtimeControls.model.isEmpty {
             runtimeControls.model = detail.thread.effectiveModel ?? detail.thread.model ?? ""
         }
@@ -1128,19 +1133,19 @@ private struct ToolRunStatusPlaceholder: View {
 
     private var statusText: String {
         if runState == .idle {
-            "等待下一次请求�?
+            "Waiting for the next request."
         } else if runState == .queued {
-            "已提交到主机队列�?
+            "Submitted to the computer queue."
         } else if runState == .running {
-            "Codex 正在运行工具或生成回复�?
+            "Codex is running tools or writing a reply."
         } else if runState == .cancelling {
-            "已请求停止�?
+            "Stop requested."
         } else if runState == .failed {
-            "上一次运行失败，可以从工具栏重试�?
+            "The last run failed. You can retry from the toolbar."
         } else if runState == .completed {
-            "上一次运行已完成�?
+            "The last run completed."
         } else if runState == .cancelled {
-            "上一次运行已取消�?
+            "The last run was cancelled."
         } else {
             runState.phase.capitalized
         }

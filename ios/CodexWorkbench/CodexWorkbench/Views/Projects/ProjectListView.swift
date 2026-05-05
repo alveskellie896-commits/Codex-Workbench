@@ -120,7 +120,7 @@ private struct ProjectRow: View {
             }
 
             HStack {
-                StatusPill(text: "\(project.threadCount) 个对�?, systemImage: "bubble.left.and.bubble.right")
+                StatusPill(text: "\(project.threadCount) chats", systemImage: "bubble.left.and.bubble.right")
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.bold))
