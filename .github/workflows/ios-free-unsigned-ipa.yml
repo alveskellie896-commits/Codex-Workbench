@@ -23,7 +23,7 @@ jobs:
     env:
       IOS_PROJECT: ios/CodexWorkbench/CodexWorkbench.xcodeproj
       IOS_SCHEME: CodexWorkbench
-      IOS_CONFIGURATION: Debug
+      IOS_CONFIGURATION: Release
 
     steps:
       - name: Check out repository
