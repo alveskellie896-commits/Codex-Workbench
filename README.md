@@ -1,4 +1,4 @@
-Ôªø# Codex Workbench
+# Codex Workbench
 
 Codex Workbench is a Windows laptop + iPhone remote companion for local Codex work. The Windows side runs a local Node bridge that serves the PWA, reads `~/.codex` sessions, sends messages through Codex Desktop / CLI / app-server where available, manages trusted phone devices, keeps a phone URL, and exposes diagnostics. The iPhone side is a Home Screen friendly PWA designed to feel like an app rather than a debug webpage.
 
@@ -12,7 +12,7 @@ Codex Workbench is a Windows laptop + iPhone remote companion for local Codex wo
 ## Main capabilities
 
 - Standard QR/short-code pairing with one-time expiry.
-- Trusted-device login, rename, revoke, and ‚Äúforget this browser‚Äù.
+- Trusted-device login, rename, revoke, and °∞forget this browser°±.
 - Hashed access/refresh token storage and hashed trusted-device token storage on the server.
 - `/api/system/status` and `/api/system/diagnostics` with bridge state, public-link state, PWA version, token/device diagnostics, WebSocket clients, Codex checks, and user actions.
 - iPhone PWA layout with manifest/icon/standalone mode, safe-area handling, VisualViewport keyboard handling, bottom composer, virtual long-thread rendering, and stale-cache refresh.
@@ -57,7 +57,7 @@ Do not share the phone URL with untrusted people. The URL is protected by passwo
 ## First iPhone pairing
 
 1. Open Workbench on the computer and sign in with the access password.
-2. Open `Advanced` ‚Üí `Pairing` ‚Üí `Create pairing code`.
+2. Open `Advanced` °˙ `Pairing` °˙ `Create pairing code`.
 3. Scan the QR code with iPhone, or open the pairing URL, or type the short code.
 4. The phone becomes a trusted device and returns to the main Workbench screen.
 5. Later, open the Home Screen icon or stable URL. If the password screen appears, tap `Trusted login`.

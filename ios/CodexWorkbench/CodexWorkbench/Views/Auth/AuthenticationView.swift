@@ -18,7 +18,7 @@ struct AuthenticationView: View {
                 Form {
                     Section {
                         FirstRunHero()
-                        Picker("Mode", selection: $setupMode) {
+                        Picker("模式", selection: $setupMode) {
                             ForEach(SetupMode.allCases) { mode in
                                 Text(mode.title).tag(mode)
                             }
@@ -40,7 +40,7 @@ struct AuthenticationView: View {
 
                             SecureField("Computer password", text: $password)
                                 .textContentType(.password)
-                            Button("Continue", action: login)
+                            Button("继续", action: login)
                                 .disabled(password.isEmpty || isLoading)
                         } else {
                             SecureField("New computer password", text: $newPassword)
@@ -112,18 +112,20 @@ struct AuthenticationView: View {
         errorMessage = nil
 
         Task {
-            do {
-                let session = try await appState.apiClient.login(password: password)
-                await MainActor.run {
-                    appState.updateSession(session)
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isLoading = false
-                }
-            }
+            await appState.login(password: password)
+            errorMessage = appState.errorMessage
+            isLoading = false
+        }
+    }
+
+    private func setupPassword() {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            await appState.setupPassword(newPassword)
+            errorMessage = appState.errorMessage
+            isLoading = false
         }
     }
 
@@ -229,7 +231,7 @@ private enum SetupMode: CaseIterable, Identifiable {
         case .signIn:
             "Sign In"
         case .firstRun:
-            "First Run"
+            "首次设置"
         }
     }
 

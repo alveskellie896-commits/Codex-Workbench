@@ -132,6 +132,21 @@ struct SettingsView: View {
                         }
                     }
 
+                    Section("同步状态") {
+                        SettingsRow(
+                            title: "WebSocket",
+                            detail: connectionText,
+                            systemImage: "dot.radiowaves.left.and.right"
+                        )
+                        if let systemStatus = appState.systemStatus {
+                            SettingsRow(
+                                title: "Host",
+                                detail: systemStatus.hostOnline ? "在线 · \(systemStatus.activeRuns) 个运行中任务" : "离线",
+                                systemImage: "server.rack"
+                            )
+                        }
+                    }
+
                     Section("Interface") {
                         SettingsRow(
                             title: "Projects",
@@ -287,6 +302,17 @@ struct SettingsView: View {
                     isLoadingDevices = false
                 }
             }
+        }
+    }
+
+    private var connectionText: String {
+        switch appState.connectionState {
+        case .offline:
+            "离线"
+        case .connecting:
+            "连接中"
+        case .online:
+            "在线"
         }
     }
 }

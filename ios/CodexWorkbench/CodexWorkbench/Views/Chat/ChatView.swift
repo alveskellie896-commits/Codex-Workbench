@@ -6,7 +6,6 @@ struct ChatView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.scenePhase) private var scenePhase
     let thread: ThreadSummary
-    @State private var messages: [MessageEvent] = []
     @State private var draft = ""
     @State private var attachments: [PendingAttachment] = []
     @State private var availableModels: [ModelOption] = []
@@ -22,9 +21,12 @@ struct ChatView: View {
     @State private var detailRefreshTask: Task<Void, Never>?
     @State private var shouldNotifyRunCompletion = false
 
-    init(thread: ThreadSummary) {
-        self.thread = thread
-        _runState = State(initialValue: thread.runState)
+    private var messages: [MessageEvent] {
+        appState.messages(for: thread)
+    }
+
+    private var runState: ThreadRunState {
+        appState.runState(for: thread)
     }
 
     var body: some View {
@@ -102,19 +104,19 @@ struct ChatView: View {
             detailRefreshTask?.cancel()
             detailRefreshTask = nil
         }
-        .alert("Conversation Error", isPresented: hasErrorMessage) {
+        .alert("对话错误", isPresented: hasErrorMessage) {
             Button("OK", role: .cancel) {
-                errorMessage = nil
+                appState.errorMessage = nil
             }
         } message: {
-            Text(errorMessage ?? "")
+            Text(appState.errorMessage ?? "")
         }
     }
 
     private var hasErrorMessage: Binding<Bool> {
         Binding(
-            get: { errorMessage != nil },
-            set: { if $0 == false { errorMessage = nil } }
+            get: { appState.errorMessage != nil },
+            set: { if $0 == false { appState.errorMessage = nil } }
         )
     }
 
@@ -307,20 +309,8 @@ struct ChatView: View {
     }
 
     private func stop() {
-        runState = .cancelling
-
         Task {
-            do {
-                try await appState.apiClient.cancelRun(threadID: thread.id)
-                await MainActor.run {
-                    runState = .idle
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    runState = .failed
-                }
-            }
+            await appState.cancel(thread: thread)
         }
     }
 
@@ -1138,19 +1128,19 @@ private struct ToolRunStatusPlaceholder: View {
 
     private var statusText: String {
         if runState == .idle {
-            "Waiting for the next request."
+            "等待下一次请求�?
         } else if runState == .queued {
-            "Queued on the host."
+            "已提交到主机队列�?
         } else if runState == .running {
-            "Codex is running tools or generating a response."
+            "Codex 正在运行工具或生成回复�?
         } else if runState == .cancelling {
-            "Stop requested."
+            "已请求停止�?
         } else if runState == .failed {
-            "Last run failed. Retry is available from the toolbar."
+            "上一次运行失败，可以从工具栏重试�?
         } else if runState == .completed {
-            "Last run completed."
+            "上一次运行已完成�?
         } else if runState == .cancelled {
-            "Last run was cancelled."
+            "上一次运行已取消�?
         } else {
             runState.phase.capitalized
         }

@@ -49,10 +49,10 @@ struct ThreadListView: View {
                         }
                     }
                 } header: {
-                    Text("Conversations")
+                    Text("对话")
                 } footer: {
                     if hiddenSubagentCount > 0 {
-                        Text("\(hiddenSubagentCount) multi-agent subthreads hidden. Use the toggle above to inspect them.")
+                        Text("已隐�?\(hiddenSubagentCount) 个多 agent 子线程。打开上方开关可以查看�?)
                     }
                 }
             }
@@ -64,16 +64,16 @@ struct ThreadListView: View {
                 isLoading: isLoading,
                 hasThreads: threads.isEmpty == false,
                 isEmpty: threads.isEmpty,
-                errorMessage: errorMessage,
+                errorMessage: appState.errorMessage,
                 retry: reload
             )
         }
         .navigationTitle(project.name)
         .task(id: project.id) {
-            await reloadAsync()
+            await appState.loadThreads(for: project)
         }
         .refreshable {
-            await reloadAsync()
+            await appState.loadThreads(for: project)
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -92,7 +92,7 @@ struct ThreadListView: View {
 
     private func reload() {
         Task {
-            await reloadAsync()
+            await appState.loadThreads(for: project)
         }
     }
 
@@ -182,7 +182,7 @@ private struct ProjectConversationHeader: View {
                         .lineLimit(1)
                 }
                 Toggle(isOn: $showsSubagents.animation()) {
-                    Label("Show multi-agent subthreads", systemImage: "person.2.wave.2")
+                    Label("显示�?agent 子线�?, systemImage: "person.2.wave.2")
                 }
                 .font(.subheadline)
             }
@@ -285,14 +285,14 @@ private struct ThreadListOverlay: View {
             ProgressView("Loading conversations")
         } else if let errorMessage {
             ContentUnavailableView {
-                Label("Could Not Load Conversations", systemImage: "exclamationmark.bubble")
+                Label("无法加载对话", systemImage: "exclamationmark.bubble")
             } description: {
                 Text(errorMessage)
             } actions: {
-                Button("Retry", action: retry)
+                Button("重试", action: retry)
             }
         } else if isEmpty {
-            ContentUnavailableView("No Conversations", systemImage: "message")
+            ContentUnavailableView("暂无对话", systemImage: "message")
         }
     }
 }

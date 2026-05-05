@@ -3,9 +3,6 @@ import SwiftUI
 struct ProjectListView: View {
     @Environment(AppState.self) private var appState
     @Binding var selection: ProjectSummary?
-    @State private var projects: [ProjectSummary] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
 
     var body: some View {
         ZStack {
@@ -23,10 +20,13 @@ struct ProjectListView: View {
                         .listRowBackground(Color.clear)
                 }
 
-                Section("Projects") {
-                    ForEach(projects) { project in
+                Section("项目") {
+                    ForEach(appState.projects) { project in
                         ProjectRow(project: project)
                             .tag(project)
+                            .onTapGesture {
+                                appState.selectProject(project)
+                            }
                     }
                 }
             }
@@ -34,42 +34,31 @@ struct ProjectListView: View {
         }
         .overlay {
             ProjectListOverlay(
-                isLoading: isLoading,
-                isEmpty: projects.isEmpty,
-                errorMessage: errorMessage,
+                isLoading: appState.isLoadingProjects,
+                isEmpty: appState.projects.isEmpty,
+                errorMessage: appState.errorMessage,
                 retry: reload
             )
         }
-        .navigationTitle("Projects")
+        .navigationTitle("项目")
         .toolbar {
-            Button("Refresh", systemImage: "arrow.clockwise", action: reload)
-                .disabled(isLoading)
+            Button("刷新", systemImage: "arrow.clockwise", action: reload)
+                .disabled(appState.isLoadingProjects)
         }
         .task {
-            await reloadAsync()
+            if appState.projects.isEmpty {
+                await appState.loadProjects()
+            }
         }
         .refreshable {
-            await reloadAsync()
+            await appState.loadProjects()
         }
     }
 
     private func reload() {
         Task {
-            await reloadAsync()
+            await appState.loadProjects()
         }
-    }
-
-    private func reloadAsync() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            projects = try await appState.apiClient.fetchProjects()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
-        isLoading = false
     }
 }
 
@@ -125,15 +114,13 @@ private struct ProjectRow: View {
                     }
                 }
                 Spacer()
-                if let updatedAt = project.updatedAt {
-                    Text(updatedAt, style: .relative)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                Text(project.updatedAt ?? Date(), style: .relative)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             HStack {
-                StatusPill(text: "Conversations", systemImage: "bubble.left.and.bubble.right")
+                StatusPill(text: "\(project.threadCount) 个对�?, systemImage: "bubble.left.and.bubble.right")
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.bold))
@@ -152,17 +139,17 @@ private struct ProjectListOverlay: View {
 
     var body: some View {
         if isLoading {
-            ProgressView("Loading projects")
+            ProgressView("正在加载项目")
         } else if let errorMessage {
             ContentUnavailableView {
-                Label("Could Not Load Projects", systemImage: "wifi.exclamationmark")
+                Label("无法加载项目", systemImage: "wifi.exclamationmark")
             } description: {
                 Text(errorMessage)
             } actions: {
-                Button("Retry", action: retry)
+                Button("重试", action: retry)
             }
         } else if isEmpty {
-            ContentUnavailableView("No Projects", systemImage: "folder")
+            ContentUnavailableView("暂无项目", systemImage: "folder")
         }
     }
 }

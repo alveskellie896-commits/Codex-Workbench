@@ -226,7 +226,7 @@ private struct ModelMenu: View {
 
     private var selectedTitle: String {
         guard let selectedModel else {
-            return "Default model"
+            return "默认模型"
         }
         return models.first { $0.id == selectedModel }?.displayName ?? selectedModel
     }
