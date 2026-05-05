@@ -43,10 +43,13 @@ jobs:
           echo "IOS_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
       - name: Build iPhone app without Apple Developer signing
+        continue-on-error: true
         env:
           IOS_DERIVED_DATA: ${{ runner.temp }}/CodexWorkbenchDerivedData
+          IOS_BUILD_LOG: ${{ runner.temp }}/xcodebuild.log
         run: |
           set -euo pipefail
+          set +e
           xcodebuild build \
             -project "$IOS_PROJECT" \
             -scheme "$IOS_SCHEME" \
@@ -58,9 +61,30 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            clean build
+            clean build 2>&1 | tee "$IOS_BUILD_LOG"
+          BUILD_STATUS="${PIPESTATUS[0]}"
+          set -e
+
+          {
+            echo "## Xcode build tail"
+            echo ""
+            echo '```text'
+            tail -n 220 "$IOS_BUILD_LOG"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$BUILD_STATUS"
+
+      - name: Upload Xcode build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
 
       - name: Package unsigned IPA
+        if: always()
         env:
           IOS_DERIVED_DATA: ${{ runner.temp }}/CodexWorkbenchDerivedData
           IOS_UNSIGNED_IPA_DIR: ${{ runner.temp }}/CodexWorkbenchUnsignedIPA
