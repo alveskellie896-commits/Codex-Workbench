@@ -115,6 +115,10 @@ jobs:
             echo "Packaged IPA is missing a code signature envelope."
             exit 1
           }
+          unzip -l "$IOS_UNSIGNED_IPA_DIR/CodexWorkbench-unsigned.ipa" | grep -E "Assets.car|AppIcon" || {
+            echo "Packaged IPA is missing compiled app icon assets."
+            exit 1
+          }
           ls -lh "$IOS_UNSIGNED_IPA_DIR"
 
       - name: Upload unsigned IPA artifact
