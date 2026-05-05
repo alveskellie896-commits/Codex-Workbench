@@ -103,10 +103,18 @@ jobs:
             exit 1
           fi
 
+          xattr -cr "$APP_PATH"
+          /usr/bin/codesign --force --sign - --timestamp=none "$APP_PATH"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
           mkdir -p "$IOS_UNSIGNED_IPA_DIR/Payload"
           cp -R "$APP_PATH" "$IOS_UNSIGNED_IPA_DIR/Payload/"
           (cd "$IOS_UNSIGNED_IPA_DIR" && zip -qry "CodexWorkbench-unsigned.ipa" Payload)
           unzip -l "$IOS_UNSIGNED_IPA_DIR/CodexWorkbench-unsigned.ipa" | head -n 40
+          unzip -l "$IOS_UNSIGNED_IPA_DIR/CodexWorkbench-unsigned.ipa" | grep -E "_CodeSignature|CodeResources" || {
+            echo "Packaged IPA is missing a code signature envelope."
+            exit 1
+          }
           ls -lh "$IOS_UNSIGNED_IPA_DIR"
 
       - name: Upload unsigned IPA artifact
