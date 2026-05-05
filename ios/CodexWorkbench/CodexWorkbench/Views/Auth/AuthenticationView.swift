@@ -54,7 +54,7 @@ struct AuthenticationView: View {
                         Text(setupMode.footer)
                     }
 
-                    Section("Pair This iPhone") {
+                    Section {
                         TextField("Pairing code", text: $pairingCode)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
@@ -65,6 +65,8 @@ struct AuthenticationView: View {
                             Label("Pair and Sign In", systemImage: "qrcode.viewfinder")
                         }
                         .disabled(pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || deviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                    } header: {
+                        Text("Pair This iPhone")
                     } footer: {
                         Text("Create a pairing code on the computer or browser version, then enter it here. The trusted-device token is stored in Keychain.")
                     }
